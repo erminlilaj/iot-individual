@@ -1,0 +1,139 @@
+#include "aggregator.h"
+#include "tasks.h"
+#include "display.h"
+#include "lorawan.h"
+#include "mqtt_client.h"
+#include "energy_model.h"
+#include "anomaly.h"
+#include "fft_analysis.h"
+#include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <math.h>
+
+// ── Ring buffer ───────────────────────────────────────────────────────────────
+
+static const uint16_t RING_SIZE = 1000;   // covers 10 s at 100 Hz or ~99 s at 10 Hz
+
+static float        ring[RING_SIZE];
+static uint16_t     head  = 0;    // next write position
+static uint16_t     count = 0;    // number of valid entries (caps at RING_SIZE)
+static SemaphoreHandle_t ring_mutex;
+
+void ring_buffer_init() {
+    ring_mutex = xSemaphoreCreateMutex();
+}
+
+void ring_buffer_push(float sample) {
+    xSemaphoreTake(ring_mutex, portMAX_DELAY);
+    ring[head] = sample;
+    head = (head + 1) % RING_SIZE;
+    if (count < RING_SIZE) count++;
+    xSemaphoreGive(ring_mutex);
+}
+
+float ring_buffer_mean() {
+    xSemaphoreTake(ring_mutex, portMAX_DELAY);
+    uint16_t n = count;
+    float sum  = 0.0f;
+    // All valid entries occupy ring[0..n-1] while not yet full,
+    // or ring[0..RING_SIZE-1] once full — either way sum the first n.
+    for (uint16_t i = 0; i < n; i++) {
+        sum += ring[i];
+    }
+    xSemaphoreGive(ring_mutex);
+    return (n > 0) ? sum / (float)n : 0.0f;
+}
+
+float ring_buffer_mean_last(uint16_t sample_count) {
+    xSemaphoreTake(ring_mutex, portMAX_DELAY);
+
+    uint16_t available = count;
+    uint16_t n = (sample_count < available) ? sample_count : available;
+    float sum = 0.0f;
+
+    if (n > 0) {
+        // Walk backwards from the newest sample so the aggregation window
+        // always covers the most recent fs * 5 seconds, not the whole history.
+        for (uint16_t i = 0; i < n; i++) {
+            int32_t idx = (int32_t)head - 1 - (int32_t)i;
+            if (idx < 0) idx += RING_SIZE;
+            sum += ring[(uint16_t)idx];
+        }
+    }
+
+    xSemaphoreGive(ring_mutex);
+    return (n > 0) ? sum / (float)n : 0.0f;
+}
+
+float ring_buffer_std() {
+    xSemaphoreTake(ring_mutex, portMAX_DELAY);
+    uint16_t n = count;
+    float sum = 0.0f;
+    for (uint16_t i = 0; i < n; i++) sum += ring[i];
+    float mean = (n > 0) ? sum / (float)n : 0.0f;
+    float var  = 0.0f;
+    for (uint16_t i = 0; i < n; i++) {
+        float d = ring[i] - mean;
+        var += d * d;
+    }
+    xSemaphoreGive(ring_mutex);
+    return (n > 1) ? sqrtf(var / (float)n) : 0.0f;
+}
+
+uint16_t ring_buffer_count() {
+    xSemaphoreTake(ring_mutex, portMAX_DELAY);
+    uint16_t n = count;
+    xSemaphoreGive(ring_mutex);
+    return n;
+}
+
+// ── Aggregator task ───────────────────────────────────────────────────────────
+
+static void aggregator_task(void*) {
+    uint32_t window_count = 0;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(5000));   // 5-second aggregation window
+
+        uint32_t t_start = micros();
+
+        xSemaphoreTake(g_fs_mutex, portMAX_DELAY);
+        float fs = g_fs_current;
+        xSemaphoreGive(g_fs_mutex);
+
+        uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
+        if (target_samples == 0) target_samples = 1;
+
+        float mean = ring_buffer_mean_last(target_samples);
+        uint16_t n = ring_buffer_count();
+        if (n > target_samples) n = target_samples;
+
+        window_count++;
+
+        energy_model_print(fs);
+        anomaly_print_stats();
+        display_update(fs, mean, n, lorawan_is_joined(), mqtt_is_connected(), window_count);
+        lorawan_send(mean);
+        mqtt_send(mean);
+
+        uint32_t proc_us = micros() - t_start;
+
+        Serial.printf("[AGG]  win=%lu  mean=%+.4f  n=%u  fs=%.1f Hz  proc_us=%lu\n",
+                      (unsigned long)window_count, mean, n, fs, (unsigned long)proc_us);
+
+#if defined(SIGNAL_MODE) && SIGNAL_MODE == 2
+        // Every 5th window: compare FFT on contaminated vs Z-score-filtered signal
+        if (window_count % 5 == 0) {
+            float f_raw, f_flt;
+            compute_fft_contamination_report(fs, &f_raw, &f_flt);
+            Serial.printf("[FFT-CONTAM] raw_peak=%.2f Hz  filtered_peak=%.2f Hz  (expected 5.00 Hz)\n",
+                          f_raw, f_flt);
+        }
+#endif
+    }
+}
+
+void start_aggregator_task() {
+    // Core 0, 4 KB stack — arithmetic only, no heavy compute
+    xTaskCreatePinnedToCore(aggregator_task, "aggregator", 8192, nullptr, 1, nullptr, 0);
+}

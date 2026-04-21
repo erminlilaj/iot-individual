@@ -1,0 +1,15 @@
+#pragma once
+
+// Copy this file to config.h and fill in your credentials.
+// config.h is listed in .gitignore and will never be committed.
+
+// WiFi credentials
+#define WIFI_SSID     "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+
+// MQTT broker — IP address of the laptop/PC running tools/edge_server.py.
+// The ESP32 and the broker machine must be on the same WiFi network.
+// Find your laptop's IP with: ip addr  (Linux/Mac) or ipconfig (Windows)
+#define MQTT_BROKER_IP   "192.168.1.100"
+#define MQTT_BROKER_PORT 1883
+#define MQTT_CLIENT_ID   "eri-iot-esp32"
