@@ -1,0 +1,48 @@
+# PlatformIO build output
+.pio/
+.pioenvs/
+.piolibdeps/
+.pio_home/
+.platformio/
+firmware/.pio/
+monitor/.pio/
+
+# Private config — never commit these
+firmware/src/config.h
+firmware/src/lorawan_keys.h
+
+# Local docs / agent notes not meant for GitHub
+.claude/
+.codex
+docs/
+AGENTS.md
+CLAUDE.md
+CODEX.md
+GEMINI.md
+LEARNING.md
+REQUIREMENTS.md
+WALKTHROUGH.md
+firmware/CLAUDE.md
+firmware/plan.md
+
+# Python virtual environment / caches
+.venv/
+__pycache__/
+tools/__pycache__/
+
+# Local tooling and logs
+tools/bsp/
+tools/edge_log.csv
+fixed_pio/
+pio_fix.py
+MAHI.log
+imgui.ini
+monitor/
+
+# IDE / editor state
+.vscode/
+firmware/.vscode/
+
+# Build artifacts
+*.bin
+*.elf
