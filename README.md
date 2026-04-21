@@ -1,65 +1,207 @@
 # IoT Individual Assignment
 
-Adaptive sampling on `ESP32-S3 / Heltec WiFi LoRa 32 V3` using `FreeRTOS`, `FFT`, `MQTT`, and optional `LoRaWAN`.
+Adaptive sampling pipeline on `ESP32-S3 / Heltec WiFi LoRa 32 V3` using `FreeRTOS`, `FFT`, `MQTT`, and optional `LoRaWAN`.
 
-## What This Project Does
+## Table Of Contents
 
-The device generates a virtual input signal:
+- [Overview](#overview)
+- [Assignment Coverage](#assignment-coverage)
+- [System Architecture](#system-architecture)
+- [Repository Layout](#repository-layout)
+- [Implementation Summary](#implementation-summary)
+- [Setup And Run](#setup-and-run)
+- [Expected Runtime Output](#expected-runtime-output)
+- [Results Summary](#results-summary)
+- [Evidence Gallery](#evidence-gallery)
+- [Current Limitations](#current-limitations)
+
+## Overview
+
+This project implements an end-to-end IoT node that generates a virtual sensor signal, estimates its dominant frequency with an FFT, adapts the sampling frequency, computes a `5 s` aggregate window, and transmits the result to a nearby edge server over `MQTT/WiFi`.
+
+The same window result can also be sent through `LoRaWAN + TTN` when coverage and credentials are available.
+
+The input signal is:
 
 ```text
 s(t) = 2*sin(2*pi*3*t) + 4*sin(2*pi*5*t)
 ```
 
-Then it performs this pipeline:
+Core idea:
 
-1. Start from a higher sampling rate.
-2. Collect a window of samples.
-3. Run an FFT to estimate the dominant frequency.
-4. Adapt the sampling frequency according to Nyquist.
-5. Compute the average over a 5-second window.
-6. Send the aggregate value to a nearby edge server using MQTT over WiFi.
-7. Optionally send the same aggregate to TTN using LoRaWAN.
+- sample the signal locally
+- estimate the dominant frequency
+- reduce the sampling rate to a Nyquist-safe value
+- send one aggregate instead of many raw samples
 
-The main idea is simple: transmit one useful aggregate instead of many raw samples.
+## Assignment Coverage
 
-## Recommended Demo Path
+| Requirement | Status | Notes |
+| --- | --- | --- |
+| Maximum sampling frequency | Done | Practical schedulable rate measured around `1000 Hz` in the FreeRTOS-based setup |
+| Maximum input frequency | Done | FFT identifies the dominant component around `5 Hz` |
+| Optimal sampling frequency | Done | Adaptive rate stabilizes around `10 Hz` |
+| Aggregate over a window | Done | Mean computed over `5 s` windows |
+| MQTT + WiFi edge delivery | Done | Python edge listener receives aggregate payloads |
+| LoRaWAN + TTN cloud delivery | Implemented | Depends on TTN join and local radio coverage during demo |
+| Communication cost evaluation | Done | Repo logs payload reduction and aggregate-only transmission |
+| End-to-end latency evaluation | Done | MQTT RTT is logged in firmware and visible during runs |
+| Energy evaluation | Partial but usable | Firmware includes a proxy model and the repo includes an INA219 monitor path |
+| Bonus anomaly handling | Done | Noise mode, spike mode, Z-score, and Hampel logic are included |
 
-For the class demo, the easiest path to explain is:
+## System Architecture
 
-- virtual signal generation
-- FFT-based frequency estimation
-- adaptive sampling from `100 Hz` down to about `10 Hz`
-- 5-second average
-- MQTT transmission to the local edge server
+```text
+virtual signal
+    -> sampling task
+    -> FFT analysis
+    -> adaptive sampling controller
+    -> 5 s aggregation window
+    -> MQTT edge server
+    -> optional LoRaWAN / TTN uplink
+```
 
-`LoRaWAN` is implemented, but it is best presented as a secondary path because TTN join and radio coverage depend on the environment.
+Main runtime tasks:
 
-## Current Status
+- `sampler_task`: samples the synthetic signal and fills the buffers
+- `fft_task`: computes the spectrum and updates the sampling frequency
+- `aggregator_task`: computes the `5 s` mean and triggers transmissions
+- `mqtt_loop_task`: keeps the MQTT connection alive
 
-### Core features
+## Repository Layout
 
-- Virtual sinusoidal sensor: implemented
-- FFT-based adaptive sampling: implemented
-- 5-second average: implemented
-- MQTT to local edge server: implemented
-- LoRaWAN uplink: implemented, but environment-dependent during demo
-- Per-window timing logs: implemented
-- Data volume comparison: implemented
+```text
+firmware/
+  src/                 main ESP32 firmware
+  platformio.ini       build environments and dependencies
 
-### Bonus features
+tools/
+  edge_server.py       MQTT edge listener
+  serial_plotter.py    host-side plotting utility
+  power_bridge.py      helper for measurement workflows
+  monitor_esp32/       INA219 monitor firmware for plotting-oriented runs
 
-- Noisy signal mode: implemented
-- Spike injection mode: implemented
-- Z-score / Hampel anomaly logic: implemented
+images/
+  screenshot evidence used in the demo / submission
+```
 
-These bonus parts are not required for the main defense and do not need to be the focus of the presentation.
+Most relevant files:
 
-## Measured Values Used In The Writeup
+- `firmware/src/main.cpp`
+- `firmware/src/tasks.cpp`
+- `firmware/src/aggregator.cpp`
+- `firmware/src/fft_analysis.cpp`
+- `firmware/src/mqtt_client.cpp`
+- `firmware/src/lorawan.cpp`
+- `firmware/src/display.cpp`
+- `tools/edge_server.py`
 
-These are the conservative values currently used in the project:
+## Implementation Summary
+
+### 1. Signal Generation
+
+The signal is generated directly on the ESP32, which keeps the demo reproducible and avoids needing an external sensor source.
+
+### 2. Maximum Sampling Frequency
+
+The project uses a practical maximum of about `1000 Hz`, which matches the `1 ms` scheduling floor of the FreeRTOS-based implementation. This is more defensible than claiming a purely theoretical loop speed.
+
+### 3. FFT And Adaptive Sampling
+
+The firmware gathers a window of samples, runs an FFT, and estimates the dominant frequency near `5 Hz`. It then lowers the sampling rate to about `10 Hz`, which is consistent with a Nyquist-safe policy for this signal.
+
+### 4. Aggregate Window
+
+Every `5 s`, the firmware computes the mean of the most recent window and uses that as the transmitted result. This keeps the communication path simple and reduces data volume compared with sending raw samples.
+
+### 5. MQTT Edge Communication
+
+The aggregate is sent to a local MQTT broker over WiFi. The Python edge server receives the payload, logs it, and can be used to observe round-trip timing.
+
+### 6. LoRaWAN Uplink
+
+The same aggregate can be sent with LoRaWAN through TTN. This path is implemented in firmware, but successful live proof depends on join success and local network coverage.
+
+### 7. Display And Monitoring
+
+The DUT firmware includes an OLED dashboard with rotating pages for sampling frequency, FFT result, aggregate state, MQTT status, RTT, and LoRa join state.
+
+The repository also contains a separate INA219 monitor path under `tools/monitor_esp32/` for external power measurements.
+
+## Setup And Run
+
+### 1. Prepare Local Credentials
+
+Create the local config from the example:
+
+```bash
+cp firmware/src/config.h.example firmware/src/config.h
+```
+
+Then fill in:
+
+- WiFi SSID and password
+- MQTT broker host / port / topic settings
+- TTN credentials if you want to test LoRaWAN
+
+### 2. Build And Upload Firmware
+
+```bash
+cd firmware
+~/.platformio/penv/bin/pio run -e heltec_wifi_lora_32_V3 -t upload --upload-port /dev/ttyUSB0
+```
+
+Other signal-mode environments are also available in `platformio.ini`.
+
+### 3. Open The Serial Monitor
+
+```bash
+stty -F /dev/ttyUSB0 115200 raw cs8 -cstopb -parenb && cat /dev/ttyUSB0
+```
+
+### 4. Start The Edge Server
+
+```bash
+cd tools
+python edge_server.py
+```
+
+### 5. Optional Power Monitor Path
+
+If you want external power traces, the repo also includes:
+
+```bash
+cd tools/monitor_esp32
+~/.platformio/penv/bin/pio run -e monitor -t upload --upload-port /dev/ttyUSB0
+```
+
+This monitor firmware is intended for INA219-based measurement workflows.
+
+## Expected Runtime Output
+
+Typical lines from the main firmware look like:
+
+```text
+[FFT] dominant = 5.00 Hz -> fs updated to 10.0 Hz
+[AGG] win=3 mean=+0.0001 n=50 fs=10.0 Hz proc_us=...
+[MQTT] #3 avg=0.0012 payload=6 B total=18 B ...
+[LATENCY] rtt_ms=312
+```
+
+Typical OLED behavior on the DUT:
+
+- splash screen at boot
+- rotating dashboard pages
+- frequency and mode information
+- aggregate / window information
+- MQTT / RTT / LoRa status
+
+## Results Summary
+
+Conservative values used in this repository:
 
 | Metric | Value |
-|--------|-------|
+| --- | --- |
 | Maximum schedulable sampling frequency | about `1000 Hz` |
 | Dominant signal frequency | about `5 Hz` |
 | Adaptive sampling frequency | about `10 Hz` |
@@ -68,133 +210,42 @@ These are the conservative values currently used in the project:
 | LoRa payload per window | `2 B` |
 | MQTT RTT | roughly `200-835 ms` in local tests |
 
-Important note:
-Energy numbers in this repository should be presented carefully. The firmware includes a software-side proxy and the repo also contains an external INA219 measurement path, but the safest oral claim is:
+Interpretation:
 
-`adaptive sampling reduces processing activity and transmitted data volume; power savings depend on the real sleep/communication behavior of the board`
+- adaptive sampling clearly reduces local sample-processing activity
+- aggregation clearly reduces the number of transmitted values
+- exact energy savings depend on how much WiFi, radio, and idle power dominate the board behavior
 
-## Architecture
+## Evidence Gallery
 
-### FreeRTOS tasks
+Current repository evidence includes:
 
-- `sampler_task`
-  Samples the virtual signal and pushes values to the ring buffer and FFT buffer.
-- `fft_task`
-  Runs FFT on a completed sample block and updates the sampling frequency.
-- `aggregator_task`
-  Every 5 seconds computes the mean and sends it through MQTT and optionally LoRa.
-- `mqtt_loop_task`
-  Keeps the MQTT client alive in the background.
+- maximum sampling benchmark screenshot
+- FFT and adaptive-sampling screenshot
+- edge server receiving aggregates
+- MQTT latency serial output
+- MQTT topic subscriber output
+- TTN screenshots from LoRa runs
+- serial plotter dashboard
+- anomaly detection screenshots
 
-### Important files
+See the `images/` folder for the captured artifacts.
 
-- `firmware/src/main.cpp`
-- `firmware/src/tasks.cpp`
-- `firmware/src/aggregator.cpp`
-- `firmware/src/mqtt_client.cpp`
-- `firmware/src/lorawan.cpp`
-- `firmware/src/sensor.cpp`
-- `tools/edge_server.py`
+## Current Limitations
 
-## How To Run
+- LoRaWAN proof is environment-dependent because TTN join can fail when coverage is poor
+- energy claims should be presented cautiously unless backed by the external INA219 setup
+- the strongest and most repeatable demo path is:
 
-### 1. Prepare credentials
-
-Create `firmware/src/config.h` from `config.h.example` and fill in the WiFi and MQTT values.
-
-If you want to test LoRaWAN too, also provide the TTN keys in the corresponding local header used by the firmware.
-
-### 2. Flash the firmware
-
-```bash
-cd firmware
-~/.platformio/penv/bin/pio run -e heltec_wifi_lora_32_V3 -t upload --upload-port /dev/ttyUSB0
-```
-
-### 3. Open the serial monitor
-
-```bash
-stty -F /dev/ttyUSB0 115200 raw cs8 -cstopb -parenb && cat /dev/ttyUSB0
-```
-
-### 4. Start the edge server
-
-```bash
-cd tools
-python edge_server.py
-```
-
-## What To Look For In The Logs
-
-Typical lines to show during the demo:
-
-```text
-[FFT]  dominant = 5.00 Hz  -> fs updated to 10.0 Hz
-[MQTT] #3 avg=0.0012 payload=6 B total=18 B baseline=60000 B ratio=3333x
-[LATENCY] rtt_ms=312
-[AGG]  win=3  mean=+0.0001  n=50  fs=10.0 Hz  proc_us=...
-```
-
-These lines are enough to explain:
-
-- the signal frequency estimation
-- the adaptive rate
-- the aggregate computation
-- the edge transmission
-- the reduced transmitted volume
-
-## Performance Discussion
-
-### Sampling
-
-The project uses a practical ceiling of about `1000 Hz` because the sampling task uses `vTaskDelay()` and the scheduler tick gives a `1 ms` floor. This is easier to defend than claiming a much higher theoretical number that the full FreeRTOS system does not actually sustain.
-
-### Communication volume
-
-The strongest communication argument is local:
-
-- without aggregation, many raw samples would need to be sent
-- with aggregation, only one value is sent every 5 seconds
-
-This clearly reduces transmitted data volume.
-
-### Energy
-
-Energy should be described cautiously:
-
-- adaptive sampling reduces CPU activity related to sampling
-- aggregation reduces communication payload volume
-- real energy savings depend on WiFi, radio, and sleep behavior
-
-If asked for exact battery-life claims, it is better to say that the repository includes an evaluation path, but the safest conclusion is qualitative unless measured directly with external instrumentation.
-
-## Bonus
-
-The repository also contains:
-
-- noisy and spike-contaminated signal modes
-- anomaly-related helper code
-- FFT contamination checks
-- INA219 monitor support
-
-These features are useful for experimentation, but they are not necessary to understand the core assignment.
-
-## Defense Strategy
-
-If time is short, explain only this:
-
-1. I generate a known sinusoidal signal on the device.
-2. I sample it.
-3. I run FFT to estimate the dominant frequency.
-4. I adapt the sampling rate to roughly `2 * f_max`.
-5. I compute the mean over `5 s`.
-6. I send the mean via MQTT to a nearby edge server.
-
-That is enough to defend the main project.
+1. virtual signal generation
+2. FFT frequency estimation
+3. adaptive sampling
+4. `5 s` mean
+5. MQTT delivery to the local edge server
 
 ## References
 
-- [ArduinoFFT](https://github.com/kosme/arduinoFFT)
+- [arduinoFFT](https://github.com/kosme/arduinoFFT)
 - [RadioLib](https://github.com/jgromes/RadioLib)
 - [PubSubClient](https://github.com/knolleary/pubsubclient)
 - [U8g2](https://github.com/olikraus/u8g2)
