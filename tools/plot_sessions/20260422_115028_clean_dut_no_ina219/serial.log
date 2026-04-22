@@ -1,0 +1,11 @@
+2026-04-22T11:50:29.053+02:00 [LoRa] attempt 8 failed: -1116
+2026-04-22T11:50:30.791+02:00 [ENERGY] proxy: duty=0.0683%  I_avg=78.068 mA  batt=13 h  | baseline@100Hz: duty=0.6795%  I_avg=78.673 mA  batt=13 h  | savings=0.77%  (active=44821 µs  wait=65532900 µs)
+2026-04-22T11:50:30.797+02:00 [ANOMALY] Z-score:   TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=898)
+2026-04-22T11:50:30.802+02:00 [ANOMALY] Hampel k=5 : TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=887)
+2026-04-22T11:50:30.808+02:00 [ANOMALY] Hampel k=20: TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=857)
+2026-04-22T11:50:30.814+02:00 [ANOMALY] Hampel k=50: TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=797)
+2026-04-22T11:50:30.822+02:00 [ANOMALY] exec avg — Z-score: 2.35 µs  Hampel k=5: 21.72 µs  k=20: 84.25 µs  k=50: 229.79 µs
+2026-04-22T11:50:30.830+02:00 [ANOMALY] Hampel RAM  k=5: 55 B  k=20: 205 B  k=50: 505 B  (win[]+spike[] per instance)
+2026-04-22T11:50:30.869+02:00 [MQTT] #13 avg=0.0182  payload=6 B  total=86 B  baseline=260000 B  ratio=3023x
+2026-04-22T11:50:30.874+02:00 [AGG]  win=13  mean=+0.0182  n=50  fs=10.1 Hz  proc_us=87630
+2026-04-22T11:50:31.343+02:00 [LATENCY] rtt_ms=479
