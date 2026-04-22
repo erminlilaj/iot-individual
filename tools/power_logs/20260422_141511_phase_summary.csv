@@ -1,0 +1,4 @@
+phase_id,phase_name,samples,share_pct,avg_current_mA,avg_power_mW,min_current_mA,max_current_mA,min_power_mW,max_power_mW
+1,WIFI_IDLE,284,94.67,146.4,717.3,137.8,169.4,684.0,1192.0
+2,ACTIVE,4,1.33,173.25,753.5,171.7,175.6,712.0,846.0
+3,TX,12,4.0,244.23,1145.17,238.8,257.9,744.0,1238.0

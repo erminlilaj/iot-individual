@@ -1,0 +1,2 @@
+capture_seconds,samples,avg_bus_v,avg_current_mA,avg_power_mW,mAh_per_day,Wh_per_day
+60.0,300,4.945,150.67,734.9,3616.08,17.64
