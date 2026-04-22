@@ -68,7 +68,14 @@ This section maps the project directly to the evaluation items shown in the grad
 
 ### Max Freq
 
-The project measures a practical maximum sampling frequency of about `1000 Hz` for this implemented design.
+What was implemented:
+
+- a practical sampling benchmark in the same ESP32 task-based environment used by the project
+- the result is treated as the highest usable rate for this design, not as a theoretical chip limit
+
+Result:
+
+- the practical maximum sampling frequency was about `1000 Hz`
 
 Why this matters:
 
@@ -82,7 +89,16 @@ Where it is reflected:
 
 ### Optimal Freq
 
-The optimal sampling frequency for the chosen signal is about `10 Hz`.
+What was implemented:
+
+- the ESP32 generates a known signal with a dominant component near `5 Hz`
+- the firmware runs FFT on the sampled data
+- the adaptive controller updates the sampling rate based on the detected dominant frequency
+
+Result:
+
+- the dominant frequency was measured near `5 Hz`
+- the adaptive sampling rate converged near `10 Hz`
 
 Why:
 
@@ -97,7 +113,15 @@ Where it is reflected:
 
 ### Aggregation
 
-The project computes the mean over a fixed `5 s` window.
+What was implemented:
+
+- the firmware computes one mean value over each fixed `5 s` window
+- only that aggregate is sent instead of all raw samples
+
+Result:
+
+- the validated runs showed `5 s` windows with about `50` samples after adaptation
+- this matches the expected behavior at about `10 Hz`
 
 Why this matters:
 
@@ -113,7 +137,16 @@ Where it is reflected:
 
 ### Measure Energy
 
-Energy is discussed using the external `INA219` monitor path and supported by real measured current and power values.
+What was implemented:
+
+- a separate monitor ESP32 with `INA219` was used to measure real current and power at the DUT input
+- the monitor logs current, power, and detected states over time
+
+Result:
+
+- overall average current was `150.67 mA`
+- overall average power was `734.90 mW`
+- the measured states were `WIFI_IDLE`, `ACTIVE`, and `TX`
 
 What was measured:
 
@@ -130,7 +163,17 @@ Where it is reflected:
 
 ### Measure Network
 
-The network part is evaluated by showing that the aggregate is sent over WiFi and received by the edge listener, and by comparing the transmitted aggregate with a much larger raw-data baseline.
+What was implemented:
+
+- the ESP32 connects to WiFi and publishes the aggregate through MQTT
+- the laptop runs a local broker and an edge listener
+- the project compares the small transmitted aggregate with a much larger raw-data baseline
+
+Result:
+
+- the edge server received the transmitted values correctly
+- one aggregate payload was only about `6-7 B`
+- this is much smaller than sending raw oversampled data
 
 What is shown:
 
@@ -147,7 +190,15 @@ Where it is reflected:
 
 ### Measure Latency
 
-Latency is evaluated from the communication path.
+What was implemented:
+
+- MQTT round-trip time was measured with a ping-pong exchange
+- LoRa end-to-end latency was also logged when uplinks were available
+
+Result:
+
+- MQTT RTT in the validated run had mean `630.6 ms` and max `891.0 ms`
+- LoRa end-to-end latency had mean `11829.2 ms`
 
 What was measured:
 
@@ -163,7 +214,15 @@ Where it is reflected:
 
 ### MQTT
 
-MQTT is the main validated communication protocol in this project.
+What was implemented:
+
+- the ESP32 joins WiFi, connects to the MQTT broker, and publishes the aggregate
+- the edge server on the laptop subscribes and logs the received values
+
+Result:
+
+- MQTT worked end to end in the validated run
+- `5/5` aggregate messages were sent and received in the canonical session
 
 Why it is important:
 
@@ -179,7 +238,15 @@ Where it is reflected:
 
 ### LoRaWAN
 
-LoRaWAN is implemented as an additional communication path.
+What was implemented:
+
+- the same aggregate can also be sent through LoRaWAN
+- this path was kept as an additional communication option beside MQTT
+
+Result:
+
+- LoRa uplinks were captured in the validated results bundle
+- latency was much higher and more variable than MQTT
 
 How it should be presented:
 
@@ -525,6 +592,32 @@ What these results mean:
 - MQTT is the strongest and most repeatable communication path
 - LoRaWAN works, but remains slower and more environment-sensitive
 
+Main validated DUT figures:
+
+Waveform snapshot from the captured FFT window:
+
+![Waveform snapshot](source/results/20260422_clean_dut_no_ina219_60s_v2/01_waveform_snapshot.png)
+
+FFT spectrum showing the dominant component near `5 Hz`:
+
+![FFT spectrum](source/results/20260422_clean_dut_no_ina219_60s_v2/02_fft_spectrum.png)
+
+Adaptive sampling history converging near `10 Hz`:
+
+![Adaptive sampling](source/results/20260422_clean_dut_no_ina219_60s_v2/03_adaptive_fs.png)
+
+Aggregate values across the MQTT path:
+
+![Aggregate values across MQTT](source/results/20260422_clean_dut_no_ina219_60s_v2/04_aggregate_mqtt_path.png)
+
+MQTT latency distribution:
+
+![MQTT latency distribution](source/results/20260422_clean_dut_no_ina219_60s_v2/05_mqtt_latency_distribution.png)
+
+LoRa latency across the validated session:
+
+![LoRa latency](source/results/20260422_clean_dut_no_ina219_60s_v2/06_lora_latency.png)
+
 ## Power Measurement
 
 The repo also contains one measured external `INA219` monitor capture from the separate monitor ESP32 path:
@@ -557,6 +650,16 @@ Why these numbers matter:
 - they are external measurements at the DUT power input
 - they are stronger evidence than only using a firmware-side proxy
 - they give a clear picture of how power changes across different states
+
+Power measurement plots:
+
+Current and power over time during the monitor run:
+
+![Power timeline](tools/power_logs/20260422_141511_current_timeline.png)
+
+Average current and power by detected state:
+
+![Power phase averages](tools/power_logs/20260422_141511_phase_averages.png)
 
 Important caution:
 
