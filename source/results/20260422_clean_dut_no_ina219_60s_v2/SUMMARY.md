@@ -8,26 +8,26 @@ This bundle contains the latest validated `60 s` DUT capture with `INA219` disab
 
 ## Contents
 
-- `results_agg.csv`: quick-access aggregation export
-- `results_fft.csv`: quick-access FFT export
-- `results_latency.csv`: quick-access MQTT latency export
-- `results_lora.csv`: quick-access LoRa latency export
-- `01_waveform_snapshot.png` to `06_lora_latency.png`: quick-access final figures
-- `data/agg.csv`: 5 s aggregation windows
-- `data/fft.csv`: FFT dominant frequency and adaptive sampling updates
-- `data/latency.csv`: MQTT RTT measurements
-- `data/lora.csv`: LoRa uplink events and end-to-end latency
-- `data/mqtt_rx.csv`: MQTT values received at the edge listener
-- `data/mqtt_send.csv`: MQTT values published by the DUT
-- `data/plot_samples.csv`: raw FFT-window samples used for waveform and spectrum plots
-- `plots/01_waveform_snapshot.png`
-- `plots/02_fft_spectrum.png`
-- `plots/03_adaptive_fs.png`
-- `plots/04_aggregate_mqtt_path.png`
-- `plots/05_mqtt_latency_distribution.png`
-- `plots/06_lora_latency.png`
-- `logs/serial.log`: raw DUT serial output
-- `pics/`: supporting screenshots from the demo/evidence set
+- [results_agg.csv](results_agg.csv): quick-access aggregation export
+- [results_fft.csv](results_fft.csv): quick-access FFT export
+- [results_latency.csv](results_latency.csv): quick-access MQTT latency export
+- [results_lora.csv](results_lora.csv): quick-access LoRa latency export
+- [01_waveform_snapshot.png](01_waveform_snapshot.png) to [06_lora_latency.png](06_lora_latency.png): quick-access final figures
+- [data/agg.csv](data/agg.csv): 5 s aggregation windows
+- [data/fft.csv](data/fft.csv): FFT dominant frequency and adaptive sampling updates
+- [data/latency.csv](data/latency.csv): MQTT RTT measurements
+- [data/lora.csv](data/lora.csv): LoRa uplink events and end-to-end latency
+- [data/mqtt_rx.csv](data/mqtt_rx.csv): MQTT values received at the edge listener
+- [data/mqtt_send.csv](data/mqtt_send.csv): MQTT values published by the DUT
+- [data/plot_samples.csv](data/plot_samples.csv): raw FFT-window samples used for waveform and spectrum plots
+- [plots/01_waveform_snapshot.png](plots/01_waveform_snapshot.png)
+- [plots/02_fft_spectrum.png](plots/02_fft_spectrum.png)
+- [plots/03_adaptive_fs.png](plots/03_adaptive_fs.png)
+- [plots/04_aggregate_mqtt_path.png](plots/04_aggregate_mqtt_path.png)
+- [plots/05_mqtt_latency_distribution.png](plots/05_mqtt_latency_distribution.png)
+- [plots/06_lora_latency.png](plots/06_lora_latency.png)
+- [logs/serial.log](logs/serial.log): raw DUT serial output
+- [pics/](pics): supporting screenshots from the demo/evidence set
 
 ## Key Results
 
@@ -43,4 +43,4 @@ This bundle contains the latest validated `60 s` DUT capture with `INA219` disab
 
 - This run showed no panic or reboot signatures in the final serial log.
 - The waveform/spectrum snapshot was captured after adaptation at `10 Hz`, so the plots emphasize the dominant `~5 Hz` component.
-- The canonical detailed ledger remains in `docs/plot_data_records.md`.
+- The canonical detailed ledger remains in [PLOT_DATA_RECORDS.md](PLOT_DATA_RECORDS.md).

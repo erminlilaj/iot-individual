@@ -1,12 +1,12 @@
 # Plot Data Records
 
-Session folder: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2`
+Session folder: `tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2`
 
 This file records the exact data sources used to generate the report/defense plots for the latest captured DUT session.
 
 ## Figure 1 — DUT waveform snapshot
 
-- Output: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/plots/01_waveform_snapshot.png`
+- Output: [01_waveform_snapshot.png](01_waveform_snapshot.png)
 - Sources: `plot_samples.csv`, `metadata.json`
 - Samples used: `256`
 - Sampling rate: `10.000 Hz`
@@ -14,7 +14,7 @@ This file records the exact data sources used to generate the report/defense plo
 
 ## Figure 2 — DUT FFT magnitude spectrum
 
-- Output: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/plots/02_fft_spectrum.png`
+- Output: [02_fft_spectrum.png](02_fft_spectrum.png)
 - Sources: `plot_samples.csv`
 - Samples used: `256`
 - Sampling rate: `10.000 Hz`
@@ -22,7 +22,7 @@ This file records the exact data sources used to generate the report/defense plo
 
 ## Figure 3 — Adaptive sampling rate over time
 
-- Output: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/plots/03_adaptive_fs.png`
+- Output: [03_adaptive_fs.png](03_adaptive_fs.png)
 - Sources: `fft.csv`
 - FFT updates: `3`
 - Mean dominant frequency: `5.000 Hz`
@@ -31,7 +31,7 @@ This file records the exact data sources used to generate the report/defense plo
 
 ## Figure 4 — Aggregate values across the MQTT path
 
-- Output: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/plots/04_aggregate_mqtt_path.png`
+- Output: [04_aggregate_mqtt_path.png](04_aggregate_mqtt_path.png)
 - Sources: `agg.csv`, `mqtt_send.csv`, `mqtt_rx.csv`
 - Aggregate windows logged: `5`
 - MQTT sent messages: `5`
@@ -40,7 +40,7 @@ This file records the exact data sources used to generate the report/defense plo
 
 ## Figure 5 — MQTT latency distribution
 
-- Output: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/plots/05_mqtt_latency_distribution.png`
+- Output: [05_mqtt_latency_distribution.png](05_mqtt_latency_distribution.png)
 - Sources: `latency.csv`
 - RTT samples: `5`
 - Mean RTT: `630.6 ms`
@@ -50,7 +50,7 @@ This file records the exact data sources used to generate the report/defense plo
 
 ## Figure 6 — LoRa uplink latency
 
-- Output: `/home/eri/workspace/sapienza/iot/iot-individual/tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/plots/06_lora_latency.png`
+- Output: [06_lora_latency.png](06_lora_latency.png)
 - Sources: `lora.csv`
 - LoRa uplinks captured: `5`
 - Mean LoRa e2e latency: `11829.2 ms`
