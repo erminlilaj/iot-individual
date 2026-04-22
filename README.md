@@ -11,9 +11,9 @@ Adaptive sampling pipeline on `ESP32-S3 / Heltec WiFi LoRa 32 V3` using `FreeRTO
 - [Repository Layout](#repository-layout)
 - [Implementation Summary](#implementation-summary)
 - [Setup And Run](#setup-and-run)
+- [Logs And Results Layout](#logs-and-results-layout)
 - [Expected Runtime Output](#expected-runtime-output)
 - [Results Summary](#results-summary)
-- [Visualization Ideas](#visualization-ideas)
 - [Evidence Gallery](#evidence-gallery)
 - [Documentation Notes](#documentation-notes)
 - [Current Limitations](#current-limitations)
@@ -89,9 +89,13 @@ tools/
   serial_plotter.py    host-side plotting utility
   power_bridge.py      helper for measurement workflows
   monitor_esp32/       INA219 monitor firmware for plotting-oriented runs
+  plot_sessions/       raw timestamped DUT capture sessions
 
 images/
   screenshot evidence used in the demo / submission
+
+source/
+  results/             curated submission-style export of validated sessions
 ```
 
 Most relevant files:
@@ -175,6 +179,11 @@ cd tools
 python edge_server.py
 ```
 
+The listener also accepts:
+
+- `MQTT_BROKER_HOST`
+- `MQTT_BROKER_PORT`
+
 ### 5. Optional Power Monitor Path
 
 If you want external power traces, the repo also includes:
@@ -185,6 +194,71 @@ cd tools/monitor_esp32
 ```
 
 This monitor firmware is intended for INA219-based measurement workflows.
+
+### 6. Plot-Capture Workflow
+
+To capture DUT-based report figures, flash one of the dedicated plot builds:
+
+```bash
+cd firmware
+~/.platformio/penv/bin/pio run -e clean_plot_capture -t upload --upload-port /dev/ttyUSB0
+```
+
+If the plotting dependencies are not installed yet, create a temporary virtualenv:
+
+```bash
+python3 -m venv /tmp/plot-venv
+/tmp/plot-venv/bin/pip install -r tools/requirements.txt
+```
+
+Then capture one session on the laptop:
+
+```bash
+/tmp/plot-venv/bin/python tools/plot_capture.py --port /dev/ttyUSB0 --max-windows 8 --session-name clean_dut
+```
+
+After the run finishes, generate the final figures and markdown ledger:
+
+```bash
+/tmp/plot-venv/bin/python tools/generate_session_plots.py tools/plot_sessions/<session_folder>
+```
+
+This produces:
+
+- session-local PNG plots under `tools/plot_sessions/.../plots/`
+- parsed CSV files for FFT, aggregation, MQTT send/receive, latency, and LoRa when present
+- an updated `docs/plot_data_records.md` linking each figure to its source data
+
+## Logs And Results Layout
+
+The repo now has two layers of run artifacts:
+
+- [`tools/plot_sessions/`](tools/plot_sessions): raw chronological capture sessions created by `tools/plot_capture.py`
+- [`source/results/`](source/results): curated submission-facing exports copied from the validated session(s)
+
+How to read them:
+
+- `tools/edge_log.csv`: long-running MQTT listener history; useful for general inspection, but not the canonical report bundle
+- `tools/plot_sessions/<timestamp>_<name>/serial.log`: raw DUT serial stream with timestamps
+- `tools/plot_sessions/<timestamp>_<name>/*.csv`: parsed extracts from that same session
+- `tools/plot_sessions/README.md`: index of capture sessions and which one is the final reference run
+- `source/results/README.md`: top-level guide to the curated report bundle
+
+Structured DUT prefixes in `serial.log`:
+
+- `[FFT]`: dominant frequency estimate and updated adaptive sampling rate
+- `[AGG]`: 5 s window aggregate
+- `[MQTT]`: publish summary and compression ratio
+- `[LATENCY]`: MQTT round-trip timing
+- `[LoRa]`: uplink summary and end-to-end latency
+- `[PLOT]` and `[PLOT-SAMPLES]`: raw FFT-window snapshot used for figure generation
+- `[ENERGY]` and `[ANOMALY]`: supplemental instrumentation
+
+If you only need the final validated evidence, start here:
+
+- [`source/results/README.md`](source/results/README.md)
+- [`source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md`](source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md)
+- [`docs/plot_data_records.md`](docs/plot_data_records.md)
 
 ## Expected Runtime Output
 
@@ -207,47 +281,35 @@ Typical OLED behavior on the DUT:
 
 ## Results Summary
 
-Conservative values used in this repository:
+The latest validated clean run is:
+
+`source/results/20260422_clean_dut_no_ina219_60s_v2/`
+
+It was exported from:
+
+`tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/`
+
+Validated metrics from that session:
 
 | Metric | Value |
 | --- | --- |
-| Maximum schedulable sampling frequency | about `1000 Hz` |
-| Dominant signal frequency | about `5 Hz` |
-| Adaptive sampling frequency | about `10 Hz` |
-| Aggregation window | `5 s` |
-| MQTT payload per window | about `6 B` |
-| LoRa payload per window | `2 B` |
-| MQTT RTT | roughly `200-835 ms` in local tests |
+| Maximum schedulable sampling frequency | practical upper bound about `1000 Hz` in this design |
+| Dominant signal frequency | `5.00 Hz` |
+| Adaptive sampling frequency | `10.00 Hz` |
+| FFT updates captured | `3` |
+| Aggregation windows captured | `5` windows of `5 s` each |
+| MQTT delivery | `5/5` sent and received at the edge listener |
+| MQTT RTT | mean `630.6 ms`, max `891.0 ms` |
+| LoRa uplinks | `5` captured |
+| LoRa end-to-end latency | mean `11829.2 ms`, range `1589-24863 ms` |
 
 Interpretation:
 
-- adaptive sampling clearly reduces local sample-processing activity
-- aggregation clearly reduces the number of transmitted values
-- exact energy savings depend on how much WiFi, radio, and idle power dominate the board behavior
-
-## Visualization Ideas
-
-The most useful way to present the retrieved data is to separate it by question:
-
-- `time series`: plot each received MQTT average against timestamp to show the `5 s` windows arriving over time
-- `pipeline state`: show `dominant frequency`, `adaptive fs`, and `window sample count` on one chart to explain why the system converges near `10 Hz` and `n ~= 50`
-- `latency`: use a small line plot or histogram of `[LATENCY] rtt_ms` to show MQTT round-trip stability
-- `anomaly detection`: use a binary event timeline or confusion-matrix table for spike windows versus detected windows
-- `power`: if the INA219 path is active, plot `current_mA` and `power_mW` together and annotate phase changes
-
-Practical options with this repo:
-
-- `tools/edge_server.py` + `tools/edge_log.csv`: best source for a simple timestamped MQTT trend chart
-- `tools/serial_plotter.py`: quickest host-side live view for serial numeric streams
-- `BetterSerialPlotter`: useful for live INA219 traces when the monitor firmware emits clean numeric channels
-- `matplotlib` or `pandas`: best choice for a final static figure in the report, especially for MQTT averages, RTT, and anomaly markers
-
-If you want the cleanest final figure set for submission, I would use:
-
-1. one line chart of MQTT averages over time
-2. one latency chart from `[LATENCY]`
-3. one anomaly figure showing spike windows and detections
-4. one optional INA219 chart only if you have a stable real capture
+- the adaptive controller consistently settled at a Nyquist-safe `10 Hz`
+- the `5 s` aggregation path produced stable windows with `n=50`
+- MQTT is the strongest validated communication path for the demo
+- LoRaWAN is implemented and successfully captured in the final clean session, but it remains slower and more environment-sensitive than MQTT
+- energy should still be presented cautiously because the final canonical run used firmware with INA219 disabled and relied on the proxy instrumentation rather than external sensor validation
 
 ## Evidence Gallery
 

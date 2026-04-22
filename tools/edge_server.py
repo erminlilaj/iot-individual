@@ -28,8 +28,8 @@ import time
 
 import paho.mqtt.client as mqtt
 
-BROKER_HOST = "127.0.0.1"
-BROKER_PORT = 1883
+BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "127.0.0.1")
+BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
 
 TOPIC_AVG  = "eri/iot/average"
 TOPIC_PING = "eri/iot/ping"

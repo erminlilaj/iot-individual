@@ -44,5 +44,6 @@ void ina219_init() {
         return;
     }
     Serial.println("[INA219] Sensor found on GPIO41/42 — starting power measurement task");
-    xTaskCreatePinnedToCore(ina219_task, "ina219", 2048, nullptr, 1, nullptr, 1);
+    // INA219 reads plus printf formatting need more headroom than a tiny task stack.
+    xTaskCreatePinnedToCore(ina219_task, "ina219", 4096, nullptr, 1, nullptr, 1);
 }

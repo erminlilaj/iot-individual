@@ -35,7 +35,7 @@ void setup() {
     Serial.println("[PM] Automatic light sleep enabled");
 
     display_init();
-    ina219_init();       // INA219 power sensor — safe no-op if not wired
+    Serial.println("[INA219] disabled for this capture run");
     energy_model_init();
     anomaly_init();
 

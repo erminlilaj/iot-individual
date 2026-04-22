@@ -7,6 +7,7 @@
 #include <arduinoFFT.h>
 #include <freertos/queue.h>
 #include <esp_timer.h>
+#include <string.h>
 
 // ── Shared state ─────────────────────────────────────────────────────────────
 
@@ -25,6 +26,12 @@ static const uint16_t FFT_N = 256;
 static double buf_real[2][FFT_N];
 static double buf_imag[2][FFT_N];
 
+static double          g_last_fft_samples[FFT_N];
+static uint16_t        g_last_fft_count = 0;
+static float           g_last_fft_fs    = 0.0f;
+static uint32_t        g_last_fft_seq   = 0;
+static SemaphoreHandle_t g_fft_capture_mutex;
+
 // ── Job descriptor sent through the queue ────────────────────────────────────
 
 struct FFTJob {
@@ -33,6 +40,32 @@ struct FFTJob {
 };
 
 static QueueHandle_t g_fft_queue;   // depth 1 — one pending job at a time
+
+#if defined(PLOT_CAPTURE)
+static void emit_plot_capture(uint32_t seq) {
+    double snapshot[FFT_N];
+    uint16_t sample_count = 0;
+    float snapshot_fs = 0.0f;
+    uint32_t snapshot_seq = 0;
+    if (!copy_last_fft_window(snapshot, FFT_N, &sample_count, &snapshot_fs, &snapshot_seq)) {
+        return;
+    }
+    if (snapshot_seq != seq || sample_count == 0) {
+        return;
+    }
+
+    Serial.printf("[PLOT] type=fft_window seq=%lu fs=%.3f n=%u\n",
+                  (unsigned long)seq, snapshot_fs, sample_count);
+    Serial.print("[PLOT-SAMPLES] seq=");
+    Serial.print((unsigned long)seq);
+    Serial.print(" values=");
+    for (uint16_t i = 0; i < sample_count; i++) {
+        Serial.printf("%.6f", snapshot[i]);
+        if (i + 1 < sample_count) Serial.print(",");
+    }
+    Serial.println();
+}
+#endif
 
 // ── Sampler task (Core 0) ─────────────────────────────────────────────────────
 
@@ -113,6 +146,14 @@ static void fft_task(void*) {
             (double)job.fs
         );
 
+        xSemaphoreTake(g_fft_capture_mutex, portMAX_DELAY);
+        memcpy(g_last_fft_samples, buf_real[job.buf_idx], sizeof(g_last_fft_samples));
+        g_last_fft_count = FFT_N;
+        g_last_fft_fs    = job.fs;
+        g_last_fft_seq++;
+        uint32_t seq = g_last_fft_seq;
+        xSemaphoreGive(g_fft_capture_mutex);
+
         fft.windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD);
         fft.compute(FFT_FORWARD);
         fft.complexToMagnitude();
@@ -131,6 +172,10 @@ static void fft_task(void*) {
 
         Serial.printf("[FFT]  dominant = %.2f Hz  →  fs updated to %.1f Hz\n",
                       (float)dominant, new_fs);
+
+#if defined(PLOT_CAPTURE)
+        emit_plot_capture(seq);
+#endif
     }
 }
 
@@ -139,6 +184,7 @@ static void fft_task(void*) {
 void start_tasks() {
     g_fs_mutex  = xSemaphoreCreateMutex();
     g_fft_queue = xQueueCreate(1, sizeof(FFTJob));
+    g_fft_capture_mutex = xSemaphoreCreateMutex();
 
     ring_buffer_init();
 
@@ -150,4 +196,26 @@ void start_tasks() {
 
     // Aggregator: Core 0, wakes every 5 s to compute and print window mean
     start_aggregator_task();
+}
+
+bool copy_last_fft_window(double* dest,
+                          uint16_t dest_len,
+                          uint16_t* out_count,
+                          float* out_fs,
+                          uint32_t* out_seq) {
+    if (!dest || dest_len < FFT_N || !out_count || !out_fs || !out_seq) {
+        return false;
+    }
+    if (!g_fft_capture_mutex) return false;
+
+    xSemaphoreTake(g_fft_capture_mutex, portMAX_DELAY);
+    bool available = (g_last_fft_count == FFT_N);
+    if (available) {
+        memcpy(dest, g_last_fft_samples, sizeof(g_last_fft_samples));
+        *out_count = g_last_fft_count;
+        *out_fs    = g_last_fft_fs;
+        *out_seq   = g_last_fft_seq;
+    }
+    xSemaphoreGive(g_fft_capture_mutex);
+    return available;
 }
