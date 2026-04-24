@@ -3,6 +3,8 @@
 #include <freertos/semphr.h>
 #include <stdint.h>
 
+static constexpr uint16_t TASKS_FFT_N = 256;
+
 // Start the sampler task (Core 0) and FFT task (Core 1).
 void start_tasks();
 
@@ -23,3 +25,11 @@ bool copy_last_fft_window(double* dest,
                           uint16_t* out_count,
                           float* out_fs,
                           uint32_t* out_seq);
+
+// Copy the uncontaminated reference window aligned with the latest raw FFT window.
+// Reference means the sample stream before spike injection, but after Gaussian noise.
+bool copy_last_fft_reference_window(double* dest,
+                                    uint16_t dest_len,
+                                    uint16_t* out_count,
+                                    float* out_fs,
+                                    uint32_t* out_seq);

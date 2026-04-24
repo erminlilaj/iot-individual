@@ -21,12 +21,14 @@ volatile int64_t  g_window_start_us = 0;
 // The sampler fills one half while the FFT task reads the other.
 // Each buffer holds FFT_N doubles for the real part; imaginary starts at 0.
 
-static const uint16_t FFT_N = 256;
+static const uint16_t FFT_N = TASKS_FFT_N;
 
 static double buf_real[2][FFT_N];
 static double buf_imag[2][FFT_N];
+static double ref_real[2][FFT_N];
 
 static double          g_last_fft_samples[FFT_N];
+static double          g_last_fft_reference[FFT_N];
 static uint16_t        g_last_fft_count = 0;
 static float           g_last_fft_fs    = 0.0f;
 static uint32_t        g_last_fft_seq   = 0;
@@ -85,21 +87,26 @@ static void sampler_task(void*) {
         energy_model_record_active(micros() - t0);
 
         bool is_spike = false;
-        float sample;
+        float reference = raw;
+        float sample = raw;
 #if defined(SIGNAL_MODE) && SIGNAL_MODE == 1
-        sample = raw + gaussian_noise(0.2f);
+        reference = raw + gaussian_noise(BONUS_NOISE_SIGMA);
+        sample = reference;
 #elif !defined(SIGNAL_MODE) || SIGNAL_MODE == 2
-        sample = inject_spike(raw, &is_spike);
+        reference = raw + gaussian_noise(BONUS_NOISE_SIGMA);
+        sample = inject_spike(reference, &is_spike);
 #else  // SIGNAL_MODE == 0: clean
+        reference = raw;
         sample = raw;
 #endif
 
         // Pass current ring-buffer stats so Z-score can evaluate immediately.
         // Stats lag by one sample but are accurate enough for the proxy model.
-        anomaly_process(sample, is_spike, ring_buffer_mean(), ring_buffer_std());
+        anomaly_process(reference, sample, is_spike, ring_buffer_mean(), ring_buffer_std());
 
         buf_real[active][idx] = (double)sample;
         buf_imag[active][idx] = 0.0;
+        ref_real[active][idx] = (double)reference;
         ring_buffer_push(sample);
 
         // Timestamp the first sample of each FFT window for e2e latency measurement
@@ -148,6 +155,7 @@ static void fft_task(void*) {
 
         xSemaphoreTake(g_fft_capture_mutex, portMAX_DELAY);
         memcpy(g_last_fft_samples, buf_real[job.buf_idx], sizeof(g_last_fft_samples));
+        memcpy(g_last_fft_reference, ref_real[job.buf_idx], sizeof(g_last_fft_reference));
         g_last_fft_count = FFT_N;
         g_last_fft_fs    = job.fs;
         g_last_fft_seq++;
@@ -212,6 +220,28 @@ bool copy_last_fft_window(double* dest,
     bool available = (g_last_fft_count == FFT_N);
     if (available) {
         memcpy(dest, g_last_fft_samples, sizeof(g_last_fft_samples));
+        *out_count = g_last_fft_count;
+        *out_fs    = g_last_fft_fs;
+        *out_seq   = g_last_fft_seq;
+    }
+    xSemaphoreGive(g_fft_capture_mutex);
+    return available;
+}
+
+bool copy_last_fft_reference_window(double* dest,
+                                    uint16_t dest_len,
+                                    uint16_t* out_count,
+                                    float* out_fs,
+                                    uint32_t* out_seq) {
+    if (!dest || dest_len < FFT_N || !out_count || !out_fs || !out_seq) {
+        return false;
+    }
+    if (!g_fft_capture_mutex) return false;
+
+    xSemaphoreTake(g_fft_capture_mutex, portMAX_DELAY);
+    bool available = (g_last_fft_count == FFT_N);
+    if (available) {
+        memcpy(dest, g_last_fft_reference, sizeof(g_last_fft_reference));
         *out_count = g_last_fft_count;
         *out_fs    = g_last_fft_fs;
         *out_seq   = g_last_fft_seq;

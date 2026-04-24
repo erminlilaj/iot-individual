@@ -5,11 +5,12 @@
 #include "mqtt_client.h"
 #include "energy_model.h"
 #include "anomaly.h"
-#include "fft_analysis.h"
+#include "sensor.h"
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <math.h>
+#include <string.h>
 
 // ── Ring buffer ───────────────────────────────────────────────────────────────
 
@@ -90,6 +91,33 @@ uint16_t ring_buffer_count() {
 
 // ── Aggregator task ───────────────────────────────────────────────────────────
 
+static void print_bonus_signal_summary(float fs, uint16_t target_samples) {
+    float duty = energy_model_duty_cycle();
+    float i_avg = duty * CURRENT_ACTIVE_MA + (1.0f - duty) * CURRENT_IDLE_MA;
+    float scale = (fs > 0.0f) ? (BASELINE_FS_HZ / fs) : 1.0f;
+    float duty_over = duty * scale;
+    if (duty_over > 1.0f) duty_over = 1.0f;
+    float i_over = duty_over * CURRENT_ACTIVE_MA + (1.0f - duty_over) * CURRENT_IDLE_MA;
+    float savings = (i_over > 0.0f) ? (1.0f - i_avg / i_over) * 100.0f : 0.0f;
+    unsigned int spike_pct = (strcmp(anomaly_signal_family(), "spikes") == 0) ? ANOMALY_SPIKE_PROB_PCT : 0;
+
+    Serial.printf(
+        "[BONUS-SIGNAL] mode=%s spike_pct=%u dominant=%.2f adaptive_fs=%.1f baseline_fs=%.1f window_n=%u baseline_window_n=%u duty_pct=%.4f i_avg_ma=%.3f savings_pct=%.2f variant=%s expected_fmax=%.1f\n",
+        anomaly_signal_family(),
+        spike_pct,
+        g_last_fft_dominant_hz,
+        fs,
+        BASELINE_FS_HZ,
+        target_samples,
+        (unsigned int)lroundf(BASELINE_FS_HZ * 5.0f),
+        duty * 100.0f,
+        i_avg,
+        savings,
+        clean_signal_variant_label(),
+        clean_signal_variant_expected_fmax_hz()
+    );
+}
+
 static void aggregator_task(void*) {
     uint32_t window_count = 0;
     for (;;) {
@@ -111,7 +139,9 @@ static void aggregator_task(void*) {
         window_count++;
 
         energy_model_print(fs);
-        anomaly_print_stats();
+        anomaly_print_stats(fs);
+        print_bonus_signal_summary(fs, target_samples);
+        anomaly_print_window_analysis(fs);
         display_update(fs, mean, n, lorawan_is_joined(), mqtt_is_connected(), window_count);
         lorawan_send(mean);
         mqtt_send(mean);
@@ -120,16 +150,6 @@ static void aggregator_task(void*) {
 
         Serial.printf("[AGG]  win=%lu  mean=%+.4f  n=%u  fs=%.1f Hz  proc_us=%lu\n",
                       (unsigned long)window_count, mean, n, fs, (unsigned long)proc_us);
-
-#if defined(SIGNAL_MODE) && SIGNAL_MODE == 2
-        // Every 5th window: compare FFT on contaminated vs Z-score-filtered signal
-        if (window_count % 5 == 0) {
-            float f_raw, f_flt;
-            compute_fft_contamination_report(fs, &f_raw, &f_flt);
-            Serial.printf("[FFT-CONTAM] raw_peak=%.2f Hz  filtered_peak=%.2f Hz  (expected 5.00 Hz)\n",
-                          f_raw, f_flt);
-        }
-#endif
     }
 }
 

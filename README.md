@@ -1,792 +1,368 @@
 # IoT Individual Assignment
 
-Adaptive sampling pipeline on `ESP32-S3 / Heltec WiFi LoRa 32 V3` using `FreeRTOS`, `FFT`, `MQTT`, optional `LoRaWAN`, and an external `INA219` monitor path for power measurements.
+This project presents an adaptive sampling pipeline on a `Heltec WiFi LoRa 32 V3 (ESP32-S3)`. The node generates a known virtual signal, finds its dominant frequency with an FFT, lowers the sampling rate to a Nyquist-safe value, computes a `5 s` mean, and sends that aggregate to a nearby edge server over `MQTT/WiFi`.
 
-## Table Of Contents
-
-- [Overview](#overview)
-- [Why This Project Exists](#why-this-project-exists)
-- [Evaluation Map](#evaluation-map)
-- [Assignment Coverage](#assignment-coverage)
-- [System Architecture](#system-architecture)
-- [Hardware Setup](#hardware-setup)
-- [Repository Layout](#repository-layout)
-- [Implementation Walkthrough](#implementation-walkthrough)
-- [Setup And Run](#setup-and-run)
-- [Logs And Results Layout](#logs-and-results-layout)
-- [Expected Runtime Output](#expected-runtime-output)
-- [Validated Results](#validated-results)
-- [Power Measurement](#power-measurement)
-- [Plots And Evidence](#plots-and-evidence)
-- [Evidence Gallery](#evidence-gallery)
-- [Presentation Notes](#presentation-notes)
-- [Current Limitations](#current-limitations)
-- [References](#references)
-
-## Overview
-
-This project implements an end-to-end IoT node that generates a virtual signal on an `ESP32-S3`, finds its dominant frequency with an FFT, adapts the sampling rate, computes a `5 s` aggregate window, and sends that aggregate to a nearby edge server over `MQTT/WiFi`.
-
-The same aggregate can also be sent through `LoRaWAN` when join conditions and coverage allow it.
-
-The input signal used in the main validation path is:
+The baseline signal used in the main validated run is:
 
 ```text
 s(t) = 2*sin(2*pi*3*t) + 4*sin(2*pi*5*t)
 ```
 
-Core idea:
+The main idea is simple: if the strongest component is `5 Hz`, then sampling near `10 Hz` is enough for this signal, so the node does not need to stay at a much higher fixed rate all the time.
 
-- sample the signal locally
-- estimate the dominant frequency
-- reduce the sampling rate to a Nyquist-safe value
-- aggregate locally over a fixed time window
-- send one useful summary instead of many raw samples
+## Overview
 
-## Why This Project Exists
+The strongest evidence in this repository is the validated clean run under [source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md](source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md) and the evaluation notebook pack starting from [docs/evaluation/00_master_scoreboard.md](docs/evaluation/00_master_scoreboard.md).
 
-The main goal is to show that the node can do useful local processing before communication.
+Here is the short presentation view of the rubric:
 
-Instead of sampling at a high fixed rate forever and sending all values, the node:
-
-1. discovers the dominant frequency content of the signal
-2. lowers the sampling rate to what is actually needed
-3. computes one aggregate every `5 s`
-4. transmits only that aggregate
-
-Why this matters:
-
-- it reduces unnecessary sampling work
-- it reduces communication volume
-- it is easier to justify from both a signal-processing and IoT perspective
-
-At a high level, the project is about adapting locally instead of only transmitting raw data.
-
-## Evaluation Map
-
-This section maps the project directly to the evaluation items shown in the grading rubric.
-
-### Max Freq
-
-What was implemented:
-
-- a practical sampling benchmark in the same ESP32 task-based environment used by the project
-- the result is treated as the highest usable rate for this design, not as a theoretical chip limit
-
-Result:
-
-- the practical maximum sampling frequency was about `1000 Hz`
-
-Why this matters:
-
-- it shows the highest rate the current task-based solution can sustain
-- it gives a reference point before adaptive reduction
-
-Where it is reflected:
-
-- [Results Summary](#validated-results)
-- [Maximum sampling rate screenshot](images/02_max_sampling_rate.png)
-
-### Optimal Freq
-
-What was implemented:
-
-- the ESP32 generates a known signal with a dominant component near `5 Hz`
-- the firmware runs FFT on the sampled data
-- the adaptive controller updates the sampling rate based on the detected dominant frequency
-
-Result:
-
-- the dominant frequency was measured near `5 Hz`
-- the adaptive sampling rate converged near `10 Hz`
-
-Why:
-
-- the dominant signal component is about `5 Hz`
-- sampling at about twice that value is enough for this signal
-
-Where it is reflected:
-
-- [FFT And Adaptive Sampling](#implementation-walkthrough)
-- [Validated Results](#validated-results)
-- [FFT adaptive sampling screenshot](images/03_fft_adaptive_sampling.png)
-
-### Aggregation
-
-What was implemented:
-
-- the firmware computes one mean value over each fixed `5 s` window
-- only that aggregate is sent instead of all raw samples
-
-Result:
-
-- the validated runs showed `5 s` windows with about `50` samples after adaptation
-- this matches the expected behavior at about `10 Hz`
-
-Why this matters:
-
-- it satisfies the aggregation requirement
-- it reduces the amount of transmitted data
-- it makes the edge output easier to interpret
-
-Where it is reflected:
-
-- [Fixed Aggregation Window](#implementation-walkthrough)
-- [Validated Results](#validated-results)
-- `[AGG]` log lines in the DUT results bundle
-
-### Measure Energy
-
-What was implemented:
-
-- a separate monitor ESP32 with `INA219` was used to measure real current and power at the DUT input
-- the monitor logs current, power, and detected states over time
-
-Result:
-
-- overall average current was `150.67 mA`
-- overall average power was `734.90 mW`
-- the measured states were `WIFI_IDLE`, `ACTIVE`, and `TX`
-
-What was measured:
-
-- overall average current
-- overall average power
-- current and power by detected state
-- a simple daily-use estimate based on the measured average
-
-Where it is reflected:
-
-- [Power Measurement](#power-measurement)
-- [Better Serial Plotter power screenshot](images/09_serial_plotter_dashboard.png)
-- files under [`tools/power_logs/`](tools/power_logs)
-
-### Measure Network
-
-What was implemented:
-
-- the ESP32 connects to WiFi and publishes the aggregate through MQTT
-- the laptop runs a local broker and an edge listener
-- the project compares the small transmitted aggregate with a much larger raw-data baseline
-
-Result:
-
-- the edge server received the transmitted values correctly
-- one aggregate payload was only about `6-7 B`
-- this is much smaller than sending raw oversampled data
-
-What is shown:
-
-- WiFi + MQTT communication works end to end
-- one aggregate is much smaller than sending all raw samples
-- the laptop receives the published values correctly
-
-Where it is reflected:
-
-- [MQTT Edge Communication](#implementation-walkthrough)
-- [Validated Results](#validated-results)
-- [Edge server screenshot](images/04_edge_server_receiving.png)
-- [MQTT topics screenshot](images/06_mosquitto_sub_topics.png)
-
-### Measure Latency
-
-What was implemented:
-
-- MQTT round-trip time was measured with a ping-pong exchange
-- LoRa end-to-end latency was also logged when uplinks were available
-
-Result:
-
-- MQTT RTT in the validated run had mean `630.6 ms` and max `891.0 ms`
-- LoRa end-to-end latency had mean `11829.2 ms`
-
-What was measured:
-
-- MQTT round-trip time
-- LoRa end-to-end latency in the validated run
-
-Where it is reflected:
-
-- [Validated Results](#validated-results)
-- `source/results/.../results_latency.csv`
-- `source/results/.../results_lora.csv`
-- [MQTT latency screenshot](images/05_mqtt_latency_serial.png)
-
-### MQTT
-
-What was implemented:
-
-- the ESP32 joins WiFi, connects to the MQTT broker, and publishes the aggregate
-- the edge server on the laptop subscribes and logs the received values
-
-Result:
-
-- MQTT worked end to end in the validated run
-- `5/5` aggregate messages were sent and received in the canonical session
-
-Why it is important:
-
-- it is the clearest end-to-end demo path
-- it shows the aggregate leaving the ESP32 and reaching the laptop
-- it is the most stable communication path in the final validation
-
-Where it is reflected:
-
-- [MQTT Edge Communication](#implementation-walkthrough)
-- [How To Demo It](#how-to-demo-it)
-- [Validated Results](#validated-results)
-
-### LoRaWAN
-
-What was implemented:
-
-- the same aggregate can also be sent through LoRaWAN
-- this path was kept as an additional communication option beside MQTT
-
-Result:
-
-- LoRa uplinks were captured in the validated results bundle
-- latency was much higher and more variable than MQTT
-
-How it should be presented:
-
-- it exists and was observed in the validated results bundle
-- it is slower and more dependent on the environment than MQTT
-- it should be treated as secondary evidence, not the main live demo path
-
-Where it is reflected:
-
-- [LoRaWAN Uplink](#implementation-walkthrough)
-- [Validated Results](#validated-results)
-- [LoRa and TTN screenshots](#evidence-gallery)
-
-## Assignment Coverage
-
-| Requirement | Status | Notes |
+| Topic | Status | Key result |
 | --- | --- | --- |
-| Maximum sampling frequency | Done | Practical schedulable rate measured around `1000 Hz` in the implemented FreeRTOS design |
-| Maximum input frequency | Done | FFT identifies the dominant component around `5 Hz` |
-| Optimal sampling frequency | Done | Adaptive rate stabilizes around `10 Hz` |
-| Aggregate over a window | Done | Mean computed over `5 s` windows |
-| MQTT + WiFi edge delivery | Done | Python edge listener receives aggregate payloads |
-| LoRaWAN + TTN cloud delivery | Implemented and observed | Works, but remains more environment-dependent than MQTT |
-| Communication cost evaluation | Done | Repo logs aggregate-only transmission and compression ratios |
-| End-to-end latency evaluation | Done | MQTT RTT and LoRa e2e latency were logged |
-| Energy evaluation | Partial but usable | Firmware proxy exists and an external INA219 monitor path was measured |
-| Bonus anomaly handling | Done | Noise mode, spike mode, Z-score, and Hampel logic are included |
+| Max Sampling Frequency | Validated | Practical ceiling of the implemented FreeRTOS design is about `1000 Hz`, with a separate raw `analogRead()` reference near `16.6 kHz` |
+| Optimal Frequency / FFT | Validated | FFT repeatedly detects `5.00 Hz`, then adaptation converges to `10.0 Hz` |
+| Aggregation | Validated | `5 s` window at `10 Hz` gives `n = 50` samples in the validated run |
+| Measure Energy | Partial | External `INA219` run shows `150.67 mA` average, but a matched adaptive-vs-fixed-rate A/B run is not yet measured |
+| Measure Network | Validated | One aggregate is `6-7 B` instead of a `20000 B` raw 5-second float stream |
+| Measure Latency | Validated | MQTT publish-to-edge mean `98.4 ms`, MQTT RTT mean `630.6 ms`, LoRa mean `11829.2 ms` |
+| MQTT | Validated | `5/5` aggregate messages sent and `5/5` received in the canonical session |
+| LoRaWAN / TTN | Observed | `5` uplinks are recorded in the curated run, with end-to-end latency in the `1589-24863 ms` range |
 
-## System Architecture
+## System Setup
 
-```text
-virtual signal
-    -> sampler task
-    -> FFT analysis
-    -> adaptive sampling controller
-    -> 5 s aggregation window
-    -> MQTT edge server
-    -> optional LoRaWAN / TTN uplink
-```
+The system uses one ESP32 as the main device under test and one optional monitor ESP32 for external power measurements. The DUT generates the virtual signal in firmware, samples it with FreeRTOS tasks, runs the FFT, computes the `5 s` mean, and publishes the result through MQTT. A second ESP32 plus `INA219` is used only when measuring current and power at the DUT input.
 
-Main runtime tasks:
+![Hardware setup](images/two_esp32_ina219_setup.png)
 
-- `sampler_task`: samples the synthetic signal and fills the working buffers
-- `fft_task`: computes the FFT and updates the adaptive sampling rate
-- `aggregator_task`: computes the `5 s` mean and triggers transmissions
-- `mqtt_loop_task`: keeps the MQTT connection alive
-
-Main communication path:
+Main path:
 
 ```text
-ESP32 -> WiFi -> MQTT broker -> edge_server.py on laptop
+virtual signal -> sampling task -> FFT -> adaptive fs -> 5 s mean -> MQTT edge server
 ```
 
-This separation helps show that the system was designed as a pipeline, not as one long loop.
-
-## Hardware Setup
-
-The project was developed around:
-
-- one `Heltec WiFi LoRa 32 V3` DUT
-- one optional second ESP32 for `INA219`-based external power monitoring
-
-Hardware reference image:
-
-![Two ESP32 boards with INA219 wiring](images/two_esp32_ina219_setup.png)
-
-## Repository Layout
+Secondary path:
 
 ```text
-firmware/
-  src/                 main ESP32 firmware
-  platformio.ini       build environments and dependencies
-
-tools/
-  edge_server.py       MQTT edge listener
-  serial_plotter.py    host-side plotting utility
-  power_bridge.py      helper for measurement workflows
-  monitor_esp32/       INA219 monitor firmware for plotting-oriented runs
-  plot_sessions/       raw timestamped DUT capture sessions
-  power_logs/          external INA219 measurement logs and plots
-
-images/
-  screenshot evidence used in the demo / submission
-
-source/
-  results/             curated validated result bundle
+same 5 s mean -> LoRaWAN / TTN
 ```
 
-Most relevant files:
+## Evaluation Results
 
-- `firmware/src/main.cpp`
-- `firmware/src/tasks.cpp`
-- `firmware/src/aggregator.cpp`
-- `firmware/src/fft_analysis.cpp`
-- `firmware/src/mqtt_client.cpp`
-- `firmware/src/lorawan.cpp`
-- `firmware/src/display.cpp`
-- `tools/edge_server.py`
-- `tools/plot_capture.py`
-- `tools/generate_session_plots.py`
-- `tools/monitor_esp32/src/main.cpp`
+### 1. Max Sampling Frequency
 
-## Implementation Walkthrough
+I measured the highest practical sampling rate of the implemented task-based firmware, not only the raw theoretical ADC limit of the ESP32-S3. Because the benchmark uses the same `1 ms` scheduling floor as the real sampler, the result is meaningful for the actual project and not just for a synthetic tight loop.
 
-### 1. Signal Generation
+There are two useful ceilings to keep separate:
 
-The signal is generated directly on the ESP32 in firmware, not by an external physical sensor.
+```text
+raw analogRead() reference ~ 16662 Hz
+task-based sampler ceiling ~ 1 / 1 ms = 1000 Hz
+```
 
-Why this choice was useful:
+The first number is the rough bare-ADC throughput reference kept in the benchmark notes. The second number is the one I actually defend for this project, because the running FreeRTOS sampler cannot go faster than its `1 ms` floor.
 
-- the frequency content is known in advance
-- it is easier to verify whether the FFT is correct
-- it makes the adaptive sampling behavior easier to defend
+Key result:
 
-For this signal:
+```text
+fs ~ 1 / 1 ms = 1000 Hz
+```
 
-- one component is at `3 Hz`
-- one stronger component is at `5 Hz`
-- the dominant frequency is therefore about `5 Hz`
-- by Nyquist, a sensible adaptive target is about `10 Hz`
+This is the value used in [docs/evaluation/01_max_sampling_frequency.md](docs/evaluation/01_max_sampling_frequency.md). The important point is that `1000 Hz` is the practical ceiling of this FreeRTOS design, while the `~16.6 kHz` figure is only a raw reference for a much tighter loop.
 
-That is why the sampling controller converges around `10 Hz`.
+![Maximum sampling rate](images/02_max_sampling_rate.png)
 
-### 2. Maximum Practical Sampling Frequency
+### 2. Optimal Frequency / FFT
 
-The project uses a practical maximum of about `1000 Hz`.
+I ran FFT analysis on the clean baseline signal and used the dominant component to update the next sampling frequency. For this signal, the expected maximum component is `5 Hz`, so the simplest Nyquist-safe target is around `10 Hz`.
 
-This is not presented as a theoretical ESP32 limit. It is the practical ceiling of this implemented design, mainly because the scheduler works at a `1 ms` scale here.
+Expected reasoning:
 
-Simple wording for discussion:
+```text
+fmax = 5 Hz
+fs,opt ~ 2 * fmax = 10 Hz
+```
 
-`the practical maximum sampling rate of this implemented FreeRTOS design is about 1000 Hz, but the meaningful operating rate for this signal becomes about 10 Hz after FFT adaptation`
+The validated run shows the FFT repeatedly detecting `5.00 Hz` and the adaptive controller repeatedly updating the sampling rate to `10.0 Hz`.
 
-### 3. FFT And Adaptive Sampling
+Real log excerpt:
 
-The firmware gathers a sample window, runs an FFT, estimates the dominant frequency, and updates the current sampling rate.
+```text
+[FFT]  dominant = 5.00 Hz  ->  fs updated to 10.0 Hz
+[FFT]  dominant = 5.00 Hz  ->  fs updated to 10.0 Hz
+[FFT]  dominant = 5.00 Hz  ->  fs updated to 10.0 Hz
+```
 
-What this is supposed to show:
+![FFT spectrum](source/results/20260422_clean_dut_no_ina219_60s_v2/02_fft_spectrum.png)
 
-- the signal-processing stage works
-- the system can adjust itself automatically
-- the final rate is justified by the observed signal rather than chosen arbitrarily
+![Adaptive sampling history](source/results/20260422_clean_dut_no_ina219_60s_v2/03_adaptive_fs.png)
 
-In the validated runs, the dominant frequency repeatedly converged to about `5 Hz`, and the adaptive sampling rate converged to about `10 Hz`.
+### 3. Aggregation
 
-### 4. Fixed Aggregation Window
+I computed the mean over a fixed `5 s` window using only the most recent samples in the ring buffer. This matters because the corrected version now behaves like a true fixed-window aggregation, not like a mean over the whole retained history.
 
-Every `5 s`, the firmware computes the mean of the most recent window and uses that as the transmitted value.
+Expected sample count after adaptation:
 
-Why this matters:
+```text
+n = fs * 5 s = 10 * 5 = 50 samples
+```
 
-- it matches the assignment requirement for local aggregation
-- it reduces communication volume
-- it makes the edge/cloud path much simpler to explain
+The canonical run shows five consecutive adapted windows with `n=50` at `10.0 Hz`.
 
-After the aggregation fix, the validated runs showed window sizes around `n=50` at `10 Hz`, which is exactly what should happen for a `5 s` window.
+Real log excerpt:
 
-### 5. MQTT Edge Communication
+```text
+[AGG]  win=92  mean=+0.0006  n=50  fs=10.0 Hz  proc_us=6636659
+[AGG]  win=93  mean=-0.0000  n=50  fs=10.0 Hz  proc_us=6637239
+...
+[AGG]  win=96  mean=+0.0003  n=50  fs=10.0 Hz  proc_us=6638311
+```
 
-The aggregate is sent to a local MQTT broker over WiFi. A Python edge listener receives it and logs it.
+Once the node has converged to `10 Hz`, a `5 s` window should contain about `50` samples. That is exactly what appears in [source/results/20260422_clean_dut_no_ina219_60s_v2/results_agg.csv](source/results/20260422_clean_dut_no_ina219_60s_v2/results_agg.csv).
 
-This is the strongest live demo path in the repo because it is the most repeatable and was clearly validated end to end.
+### 4. Measure Energy
 
-### 6. LoRaWAN Uplink
+I kept the energy discussion in two layers so the claim stays honest:
 
-The same aggregate can also be sent through LoRaWAN.
+- a firmware proxy model for quick reasoning
+- a measured external `INA219` run for real electrical evidence
 
-This path is implemented and was observed successfully in the validated results bundle, but it is slower and more dependent on the environment than MQTT. It is best presented as a secondary path, not the main live demo path.
+The measured run is summarized in [tools/power_logs/20260422_141511_summary.md](tools/power_logs/20260422_141511_summary.md).
 
-### 7. Display And Monitoring
+Measured values from the `60 s` external monitor run:
 
-The DUT firmware includes an OLED dashboard with rotating pages for:
+| Metric | Value |
+| --- | --- |
+| Mean bus voltage | `4.945 V` |
+| Overall average current | `150.67 mA` |
+| Overall average power | `734.90 mW` |
 
-- sampling frequency
-- FFT result
-- aggregate state
-- MQTT status
-- RTT
-- LoRa join state
+Measured state breakdown:
 
-The repo also contains a separate monitor path under `tools/monitor_esp32/` for external INA219-based power measurements.
+| State | Share | Avg current | Avg power |
+| --- | --- | --- | --- |
+| `WIFI_IDLE` | `94.67%` | `146.40 mA` | `717.30 mW` |
+| `ACTIVE` | `1.33%` | `173.25 mA` | `753.50 mW` |
+| `TX` | `4.00%` | `244.23 mA` | `1145.17 mW` |
 
-## Setup And Run
+![Power phase averages](tools/power_logs/20260422_141511_phase_averages.png)
 
-### 1. Prepare Local Credentials
+The measured state averages above are the clean summary view. The Better Serial Plotter capture below is the more visual live view of the same measurement path: you can see the current and power changing over time, with a mostly steady idle region and short higher-consumption bursts during active work and transmission.
 
-Create the local config from the example:
+![Better Serial Plotter power monitor](images/09_serial_plotter_dashboard.png)
+
+The measured run shows that total power is dominated much more by `WIFI_IDLE` and radio transmission than by the sampler alone. This is why the proxy model shows only a small gain in the always-awake WiFi configuration: lowering the sampling rate helps, but it does not remove WiFi overhead.
+
+Important limit of the current evidence:
+
+```text
+not yet measured: matched INA219 A/B run for adaptive mode vs forced 100 Hz oversampling
+```
+
+So the README can defend the real measured power states, but it should not claim a measured external percent delta between adaptive sampling and a fixed oversampling mode yet. That direct percentage comparison is still only available from the firmware proxy model.
+
+### 5. Measure Network
+
+I compared the real aggregate payload with a simple raw-stream baseline for one `5 s` window. This keeps the comparison easy to explain during the presentation.
+
+Raw-stream baseline:
+
+```text
+1000 Hz * 5 s * 4 B = 20000 B
+```
+
+Real MQTT payload in the validated run:
+
+```text
+6-7 B
+```
+
+| Case | Bytes for one 5 s window |
+| --- | ---: |
+| Raw float stream at `1000 Hz` | `20000 B` |
+| Aggregated MQTT payload | `6-7 B` |
+| Reduction factor | about `2857x` to `3333x` |
+
+Real log excerpt:
+
+```text
+[MQTT] #92 avg=0.0006  payload=6 B  total=597 B  baseline=1840000 B  ratio=3082x
+```
+
+The node sends one useful summary instead of thousands of raw samples. This is the main reason why local aggregation is valuable in the project.
+
+### 6. Measure Latency
+
+I kept three latency views separate, because they do not mean the same thing:
+
+- MQTT publish-to-edge receive delay
+- MQTT ping-pong RTT
+- LoRa end-to-end latency
+
+| Path | Mean | Notes |
+| --- | ---: | --- |
+| MQTT publish to edge receive | `98.4 ms` | fastest and most representative edge metric |
+| MQTT RTT | `630.6 ms` | includes broker, Python edge server, and return path |
+| LoRa end-to-end | `11829.2 ms` | much slower and more variable than MQTT |
+
+Detailed values are already collected in [docs/evaluation/06_end_to_end_latency.md](docs/evaluation/06_end_to_end_latency.md) and in the canonical result bundle.
+
+The MQTT path is local and lightweight, while the LoRaWAN path naturally adds airtime, gateway, and network delays. They should not be treated as one single latency number.
+
+### 7. MQTT
+
+I used the `5 s` aggregate as the message payload and sent it from the ESP32 to a local broker. The Python edge listener subscribed to the topic, logged the values, and echoed the ping message used for RTT measurement. This is the cleanest end-to-end path in the repository, so it is the one I would present live first.
+
+The canonical run shows `5/5` MQTT messages sent and `5/5` received at the edge listener.
+
+Real send/receive evidence:
+
+```text
+send: 2026-04-22T12:05:16.901+02:00,92,0.0006,6,...
+recv: 2026-04-22T12:05:16.997+02:00,eri/iot/average,0.0006
+...
+send: 2026-04-22T12:06:03.442+02:00,96,0.0003,6,...
+recv: 2026-04-22T12:06:03.465+02:00,eri/iot/average,0.0003
+```
+
+![Edge server receiving values](images/04_edge_server_receiving.png)
+
+### 8. LoRaWAN / TTN
+
+I keep LoRaWAN as a secondary path in the presentation: it is implemented and observed, but it is much more dependent on gateway coverage and join conditions than the local MQTT path.
+
+What the curated run shows:
+
+- `5` uplinks reached the cloud path
+- end-to-end latency ranged from `1589 ms` to `24863 ms`
+- the mean LoRa latency in that run was `11829.2 ms`
+
+That makes the LoRa result real, but clearly slower and more variable than MQTT.
+
+These screenshots are the clearest TTN-side proof already stored in the repo:
+
+![TTN live data](images/07_ttn_live_data.png)
+
+![TTN device info](images/screenshot_07b_ttn_device_info.png)
+
+Short explanation:
+
+- the first screenshot shows uplink activity reaching TTN
+- the second screenshot shows the TTN device-side view and configuration context
+- together they support the claim that the LoRaWAN path was observed, even though it is less repeatable than the local MQTT path
+
+## Bonus
+
+Peer repos usually keep the bonus section short and experiment-oriented, so I do the same here. The goal of my bonus work is not to build a second project, but to answer one extra question clearly:
+
+```text
+does the controller follow the highest tone in the signal, or only the dominant FFT peak?
+```
+
+The main bonus result is a measured three-signal matrix that makes that answer visible.
+
+### 1. Three Clean Signal Variants
+
+Measured clean signals:
+
+| Signal | Formula | Expected highest | Measured dominant | Adaptive fs |
+| --- | --- | ---: | ---: | ---: |
+| A | `2*sin(2*pi*3*t)+4*sin(2*pi*5*t)` | `5 Hz` | `5.00 Hz` | `10.00 Hz` |
+| B | `4*sin(2*pi*3*t)+2*sin(2*pi*9*t)` | `9 Hz` | `3.01 Hz` | `10.00 Hz` |
+| C | `2*sin(2*pi*2*t)+3*sin(2*pi*5*t)+1.5*sin(2*pi*7*t)` | `7 Hz` | `5.03 Hz` | `10.10 Hz` |
+
+The interesting finding is that the current controller adapts from the FFT dominant peak, not from the highest tone present in the signal. That is why signal B does not jump toward `18 Hz`: the `3 Hz` tone is stronger than the `9 Hz` tone, and the lower clamp keeps the final rate at `10 Hz`.
+
+The visual explanation for each signal is below. The plots come from the implemented formulas, while the dominant/adaptive values come from the measured DUT sessions listed in [tools/bonus_results/clean_signal_matrix_20260424.md](tools/bonus_results/clean_signal_matrix_20260424.md).
+
+#### Signal A: baseline and expected behavior
+
+Signal A is the clean reference case. The `5 Hz` tone is both the strongest one and the highest important one, so the controller behaves exactly as intended.
+
+![Signal A spectrum](source/results/20260424_clean_signal_matrix_plots/clean_a/clean_a_spectrum.svg)
+
+Why this plot matters:
+
+- the main peaks are around `5 Hz` and `3 Hz`
+- the `5 Hz` peak is the dominant one
+- the measured controller response is therefore `5.00 Hz -> 10.00 Hz`
+
+#### Signal B: weak high-frequency tone
+
+Signal B is more interesting because it contains a higher `9 Hz` component, but that component is weaker than the `3 Hz` component.
+
+![Signal B spectrum](source/results/20260424_clean_signal_matrix_plots/clean_b/clean_b_spectrum.svg)
+
+Why this plot matters:
+
+- the spectrum still shows the `9 Hz` tone
+- the stronger `3 Hz` tone dominates the FFT decision
+- the measured controller response becomes `3.01 Hz -> 10.00 Hz`, not `9 Hz -> 18 Hz`
+
+This is the clearest evidence that the current rule follows the dominant peak, not the highest tone present.
+
+#### Signal C: more complex three-tone case
+
+Signal C adds a third tone to make the spectrum slightly richer without making the explanation too hard.
+
+![Signal C spectrum](source/results/20260424_clean_signal_matrix_plots/clean_c/clean_c_spectrum.svg)
+
+Why this plot matters:
+
+- three components are present: about `2 Hz`, `5 Hz`, and `7 Hz`
+- the `5 Hz` tone is still the strongest one
+- the measured controller response stays near `5.03 Hz -> 10.10 Hz`
+
+So even in the more complex case, the controller still behaves like a dominant-tone tracker.
+
+### 2. Anomaly Filtering
+
+The firmware also includes Z-score and Hampel-based anomaly filtering for spike-like disturbances. This is a good bonus topic because it adds an extra local-processing layer on top of the main sampling and aggregation pipeline. The related notes are collected in [docs/evaluation/13_bonus_anomaly_filtering.md](docs/evaluation/13_bonus_anomaly_filtering.md).
+
+Good short message for the bonus slide:
+
+```text
+main path: clean signal -> FFT -> adaptive fs -> aggregation -> MQTT
+bonus finding: the current rule follows the dominant peak, not always the highest tone
+```
+
+Measured bonus details are collected in [docs/evaluation/12_bonus_signal_matrix.md](docs/evaluation/12_bonus_signal_matrix.md), [tools/bonus_results/clean_signal_matrix_20260424.md](tools/bonus_results/clean_signal_matrix_20260424.md), and [source/results/20260424_clean_signal_matrix_plots/SUMMARY.md](source/results/20260424_clean_signal_matrix_plots/SUMMARY.md).
+
+## How To Reproduce
+
+1. Create local credentials:
 
 ```bash
 cp firmware/src/config.h.example firmware/src/config.h
 ```
 
-Then fill in:
+2. Fill in WiFi, MQTT broker, and optional TTN credentials.
 
-- WiFi SSID and password
-- MQTT broker host / port / topic settings
-- TTN credentials if you want to test LoRaWAN
-
-### 2. Build And Upload DUT Firmware
+3. Flash the DUT firmware:
 
 ```bash
 cd firmware
 ~/.platformio/penv/bin/pio run -e heltec_wifi_lora_32_V3 -t upload --upload-port /dev/ttyUSB0
 ```
 
-Other signal-mode environments are available in `firmware/platformio.ini`.
-
-### 3. Open The DUT Serial Monitor
-
-```bash
-stty -F /dev/ttyUSB0 115200 raw cs8 -cstopb -parenb && cat /dev/ttyUSB0
-```
-
-### 4. Start The Edge Server
+4. Start the edge listener:
 
 ```bash
 cd tools
 python edge_server.py
 ```
 
-The listener also accepts:
-
-- `MQTT_BROKER_HOST`
-- `MQTT_BROKER_PORT`
-
-### 5. Optional Plot-Capture Workflow
-
-To capture DUT-based report figures, use one of the dedicated plot builds:
+5. Open the serial monitor:
 
 ```bash
-cd firmware
-~/.platformio/penv/bin/pio run -e clean_plot_capture -t upload --upload-port /dev/ttyUSB0
-```
-
-Then:
-
-```bash
-python3 -m venv /tmp/plot-venv
-/tmp/plot-venv/bin/pip install -r tools/requirements.txt
-/tmp/plot-venv/bin/python tools/plot_capture.py --port /dev/ttyUSB0 --max-windows 8 --session-name clean_dut
-/tmp/plot-venv/bin/python tools/generate_session_plots.py tools/plot_sessions/<session_folder>
-```
-
-This produces:
-
-- waveform and FFT plots
-- adaptive sampling plot
-- MQTT path plot
-- latency plots
-- parsed CSV files and markdown provenance records
-
-### 6. Optional External Power Monitor Path
-
-```bash
-cd tools/monitor_esp32
-~/.platformio/penv/bin/pio run -e monitor -t upload --upload-port /dev/ttyUSB0
 stty -F /dev/ttyUSB0 115200 raw cs8 -cstopb -parenb && cat /dev/ttyUSB0
 ```
 
-This path is used for the `INA219` power measurements described later in this README.
-
-## Logs And Results Layout
-
-The repo has three useful layers of results and logs:
-
-- [`tools/plot_sessions/`](tools/plot_sessions): raw DUT capture sessions with parsed logs and generated plots
-- [`tools/power_logs/`](tools/power_logs): external INA219 measurement logs and derived plots
-- [`source/results/`](source/results): curated validated result bundle for submission/report use
-
-How to read them:
-
-- `tools/edge_log.csv`: long-running MQTT listener history
-- `tools/plot_sessions/<timestamp>_<name>/serial.log`: raw DUT serial stream
-- `tools/plot_sessions/<timestamp>_<name>/*.csv`: parsed DUT session outputs
-- `tools/power_logs/*.tsv` and `*.csv`: external current/power captures and summaries
-- `source/results/README.md`: top-level entry point for the canonical validated DUT result bundle
-
-Structured DUT prefixes in `serial.log`:
-
-- `[FFT]`: dominant frequency estimate and adaptive rate update
-- `[AGG]`: `5 s` aggregate window
-- `[MQTT]`: publish summary and compression ratio
-- `[LATENCY]`: MQTT RTT
-- `[LoRa]`: uplink summary and end-to-end latency
-- `[PLOT]` and `[PLOT-SAMPLES]`: raw FFT-window capture for figure generation
-- `[ENERGY]` and `[ANOMALY]`: supplemental instrumentation
-
-If you only need the strongest validated DUT evidence, start here:
-
-- [`source/results/README.md`](source/results/README.md)
-- [`source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md`](source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md)
-- [`source/results/20260422_clean_dut_no_ina219_60s_v2/PLOT_DATA_RECORDS.md`](source/results/20260422_clean_dut_no_ina219_60s_v2/PLOT_DATA_RECORDS.md)
-
-## Expected Runtime Output
-
-Typical lines from the main firmware look like:
-
-```text
-[FFT] dominant = 5.00 Hz -> fs updated to 10.0 Hz
-[AGG] win=3 mean=+0.0001 n=50 fs=10.0 Hz proc_us=...
-[MQTT] #3 avg=0.0012 payload=6 B total=18 B ...
-[LATENCY] rtt_ms=312
-```
-
-Typical OLED behavior on the DUT:
-
-- splash screen at boot
-- rotating dashboard pages
-- frequency and mode information
-- aggregate / window information
-- MQTT / RTT / LoRa status
-
-## Validated Results
-
-The canonical validated clean DUT run is:
-
-- [`source/results/20260422_clean_dut_no_ina219_60s_v2/`](source/results/20260422_clean_dut_no_ina219_60s_v2/)
-
-It was exported from:
-
-- `tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2/`
-
-Validated metrics from that session:
-
-| Metric | Value |
-| --- | --- |
-| Maximum practical sampling frequency | about `1000 Hz` |
-| Dominant signal frequency | `5.00 Hz` |
-| Adaptive sampling frequency | `10.00 Hz` |
-| FFT updates captured | `3` |
-| Aggregation windows captured | `5` windows of `5 s` each |
-| Samples per adapted window | about `50` |
-| MQTT delivery | `5/5` sent and received at the edge listener |
-| MQTT RTT | mean `630.6 ms`, max `891.0 ms` |
-| LoRa uplinks | `5` captured |
-| LoRa end-to-end latency | mean `11829.2 ms`, range `1589-24863 ms` |
-
-What these results mean:
-
-- the FFT stage is finding the expected dominant frequency
-- the adaptive rate is converging to a safe value near `10 Hz`
-- the corrected aggregation window behaves as intended
-- MQTT is the strongest and most repeatable communication path
-- LoRaWAN works, but remains slower and more environment-sensitive
-
-Main validated DUT figures:
-
-Waveform snapshot from the captured FFT window:
-
-![Waveform snapshot](source/results/20260422_clean_dut_no_ina219_60s_v2/01_waveform_snapshot.png)
-
-FFT spectrum showing the dominant component near `5 Hz`:
-
-![FFT spectrum](source/results/20260422_clean_dut_no_ina219_60s_v2/02_fft_spectrum.png)
-
-Adaptive sampling history converging near `10 Hz`:
-
-![Adaptive sampling](source/results/20260422_clean_dut_no_ina219_60s_v2/03_adaptive_fs.png)
-
-Aggregate values across the MQTT path:
-
-![Aggregate values across MQTT](source/results/20260422_clean_dut_no_ina219_60s_v2/04_aggregate_mqtt_path.png)
-
-MQTT latency distribution:
-
-![MQTT latency distribution](source/results/20260422_clean_dut_no_ina219_60s_v2/05_mqtt_latency_distribution.png)
-
-LoRa latency across the validated session:
-
-![LoRa latency](source/results/20260422_clean_dut_no_ina219_60s_v2/06_lora_latency.png)
-
-## Power Measurement
-
-The repo also contains one measured external `INA219` monitor capture from the separate monitor ESP32 path:
-
-- [`tools/power_logs/20260422_141511_summary.md`](tools/power_logs/20260422_141511_summary.md)
-- [`tools/power_logs/20260422_141511_phase_summary.csv`](tools/power_logs/20260422_141511_phase_summary.csv)
-- [`tools/power_logs/20260422_141511_current_timeline.png`](tools/power_logs/20260422_141511_current_timeline.png)
-- [`tools/power_logs/20260422_141511_phase_averages.png`](tools/power_logs/20260422_141511_phase_averages.png)
-
-Measured values from that `60 s` monitor run:
-
-| Power Metric | Value |
-| --- | --- |
-| Mean bus voltage | `4.945 V` |
-| Overall average current | `150.67 mA` |
-| Overall average power | `734.90 mW` |
-| Estimated daily charge use | `3616.08 mAh/day` |
-| Estimated daily energy use | `17.64 Wh/day` |
-
-Detected states in that run:
-
-| State | Share | Average Current | Average Power |
-| --- | --- | --- | --- |
-| `WIFI_IDLE` | `94.67%` | `146.40 mA` | `717.30 mW` |
-| `ACTIVE` | `1.33%` | `173.25 mA` | `753.50 mW` |
-| `TX` | `4.00%` | `244.23 mA` | `1145.17 mW` |
-
-Why these numbers matter:
-
-- they are external measurements at the DUT power input
-- they are stronger evidence than only using a firmware-side proxy
-- they give a clear picture of how power changes across different states
-
-Power measurement plots:
-
-Current and power over time during the monitor run:
-
-![Power timeline](tools/power_logs/20260422_141511_current_timeline.png)
-
-Average current and power by detected state:
-
-![Power phase averages](tools/power_logs/20260422_141511_phase_averages.png)
-
-Important caution:
-
-- this is a measured snapshot, not a full battery discharge study
-- the monitored run did not capture a true deep idle/deep sleep state
-
-## Plots And Evidence
-
-The repo includes both DUT-derived plots and external power plots.
-
-### DUT Plot Bundle
-
-The curated DUT figure set is documented here:
-
-- [`source/results/README.md`](source/results/README.md)
-
-It includes:
-
-- waveform snapshot
-- FFT spectrum
-- adaptive sampling history
-- aggregate values across the MQTT path
-- MQTT latency distribution
-- LoRa latency
-
-### External Power Plot Bundle
-
-The external monitor plots are here:
-
-- [`tools/power_logs/20260422_141511_current_timeline.png`](tools/power_logs/20260422_141511_current_timeline.png)
-- [`tools/power_logs/20260422_141511_phase_averages.png`](tools/power_logs/20260422_141511_phase_averages.png)
-
-These show:
-
-- current and power over time
-- average current and power by detected state
-
-## Evidence Gallery
-
-The following screenshots are already stored in [`images/`](images):
-
-### Hardware
-
-![Hardware setup](images/two_esp32_ina219_setup.png)
-
-### Core MQTT Demo Path
-
-Maximum schedulable sampling rate:
-
-![Maximum sampling rate](images/02_max_sampling_rate.png)
-
-FFT-based frequency detection and adaptive sampling:
-
-![FFT adaptive sampling](images/03_fft_adaptive_sampling.png)
-
-Edge server receiving aggregates:
-
-![Edge server receiving values](images/04_edge_server_receiving.png)
-
-Serial output showing MQTT publish and latency:
-
-![MQTT latency serial](images/05_mqtt_latency_serial.png)
-
-MQTT topics observed from `mosquitto_sub`:
-
-![mosquitto_sub topics](images/06_mosquitto_sub_topics.png)
-
-### LoRa And Power Evidence
-
-LoRaWAN / TTN evidence:
-
-![TTN live data](images/07_ttn_live_data.png)
-
-![LoRa serial uplink](images/08_lora_serial_uplink.png)
-
-Better Serial Plotter power-monitor capture:
-
-![Better Serial Plotter power monitor](images/09_serial_plotter_dashboard.png)
-
-### Extra Analysis
-
-Anomaly detection output:
-
-![Anomaly detection](images/11_anomaly_detection_spikes.png)
-
-FFT contamination / filtering check:
-
-![FFT contamination](images/12_fft_contamination.png)
-
-## Presentation Notes
-
-The clearest oral discussion path is:
-
-1. explain that the signal is known and generated in firmware
-2. explain why `5 Hz` should be the dominant component
-3. explain why Nyquist implies about `10 Hz`
-4. show that the validated logs actually converge there
-5. show the `5 s` mean and the MQTT delivery path
-6. mention LoRa as implemented but environment-dependent
-7. show the external power snapshot as measured supporting evidence
-
-The clearest concise claims are:
-
-- the project performs local signal processing before communication
-- the dominant frequency is about `5 Hz`
-- the adaptive sampling rate converges near `10 Hz`
-- the aggregate is computed over a `5 s` window
-- MQTT is the main validated delivery path
-- LoRaWAN is implemented and was observed, but it is less stable than MQTT
-- external INA219 monitoring provides a measured power snapshot across states
-
-The safest careful wording is:
-
-- the `1000 Hz` figure is the practical ceiling of this implemented task-based design, not a theoretical ESP32 maximum
-- the energy numbers are useful evidence, but they are not a full battery-life experiment
-- the strongest live demo path is FFT -> adaptive fs -> aggregate -> MQTT
-
-## Current Limitations
-
-- LoRaWAN proof depends on coverage, join timing, and the local environment
-- the clean canonical DUT run used firmware with `INA219` disabled; measured power comes from the separate monitor ESP32 path
-- the power snapshot did not capture a true deep idle/deep sleep state
-- the repo is strongest when presented as an adaptive sampling + local aggregation + MQTT system, with LoRa and energy as secondary evidence
-
-## References
-
-- [arduinoFFT](https://github.com/kosme/arduinoFFT)
-- [RadioLib](https://github.com/jgromes/RadioLib)
-- [PubSubClient](https://github.com/knolleary/pubsubclient)
-- [U8g2](https://github.com/olikraus/u8g2)
+6. For power measurements, use the separate monitor path described in [tools/power_logs/20260422_141511_summary.md](tools/power_logs/20260422_141511_summary.md) and `tools/monitor_esp32/`.
+
+## Final Takeaways
+
+- The project correctly detects the dominant `5 Hz` component of the clean signal and adapts the sampling rate to `10 Hz`.
+- The aggregate is computed over a real `5 s` time window, and the validated run shows the expected `50` samples per window after adaptation.
+- MQTT over WiFi is the strongest end-to-end path in the repo: it is local, validated, and easy to demonstrate.
+- Network cost drops dramatically because the node sends one aggregate instead of thousands of raw samples.
+- Energy evidence is usable but partial: the INA219 run shows real power states, but a matched adaptive-vs-fixed-rate external A/B comparison is still missing.
+- LoRaWAN is implemented and observed, but it is slower and more environment-dependent, with the curated run ranging from `1589 ms` to `24863 ms` end to end.

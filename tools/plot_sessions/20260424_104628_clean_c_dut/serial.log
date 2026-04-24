@@ -1,0 +1,72 @@
+2026-04-24T10:46:29.193+02:00 [ 34445][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:29.602+02:00 [ 34854][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:30.012+02:00 [ 35264][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:30.218+02:00 [ 35471][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:30.635+02:00 [ 35887][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:30.661+02:00 [ 35913][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:31.036+02:00 [ 36288][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:31.139+02:00 [ 36391][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:31.243+02:00 [ 36495][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:31.650+02:00 [ 36902][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:32.059+02:00 [ 37312][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:32.114+02:00 [ 37366][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:32.469+02:00 [ 37721][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:32.757+02:00 [ENERGY] proxy: duty=0.1030%  I_avg=78.102 mA  batt=13 h  | baseline@100Hz: duty=1.0239%  I_avg=79.014 mA  batt=13 h  | savings=1.15%  (active=36374 µs  wait=35279997 µs)
+2026-04-24T10:46:32.763+02:00 [ANOMALY] Z-score:   TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=590)
+2026-04-24T10:46:32.769+02:00 [ANOMALY] Hampel k=5 : TPR=0.000  FPR=0.041  (TP=0 FP=24 FN=0 TN=555)
+2026-04-24T10:46:32.775+02:00 [ANOMALY] Hampel k=20: TPR=0.000  FPR=0.005  (TP=0 FP=3 FN=0 TN=546)
+2026-04-24T10:46:32.781+02:00 [ANOMALY] Hampel k=50: TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=489)
+2026-04-24T10:46:32.789+02:00 [ANOMALY] exec avg — Z-score: 2.34 µs  Hampel k=5: 26.67 µs  k=20: 90.07 µs  k=50: 232.74 µs
+2026-04-24T10:46:32.797+02:00 [ANOMALY] Hampel RAM  k=5: 99 B  k=20: 369 B  k=50: 909 B  (win[]+ref[]+spike[] per instance)
+2026-04-24T10:46:32.815+02:00 [BONUS-SIGNAL] mode=clean spike_pct=0 dominant=5.03 adaptive_fs=10.1 baseline_fs=100.0 window_n=50 baseline_window_n=500 duty_pct=0.1030 i_avg_ma=78.102 savings_pct=1.15 variant=clean_c expected_fmax=7.0
+2026-04-24T10:46:32.842+02:00 [AGG]  win=7  mean=-0.0103  n=50  fs=10.1 Hz  proc_us=95098
+2026-04-24T10:46:32.897+02:00 [ 38149][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:33.288+02:00 [ 38541][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:33.698+02:00 [ 38950][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:34.108+02:00 [ 39360][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:34.519+02:00 [ 39771][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:34.927+02:00 [ 40179][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:35.131+02:00 [ 40384][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:35.336+02:00 [ 40589][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:35.418+02:00 [ 40670][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:35.479+02:00 [ 40731][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:35.505+02:00 [ 40757][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:35.951+02:00 [ 41203][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:36.091+02:00 [LoRa] attempt 5 failed: -1116
+2026-04-24T10:46:36.361+02:00 [ 41613][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:36.771+02:00 [ 42023][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:37.179+02:00 [ 42432][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:37.589+02:00 [ 42842][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:37.852+02:00 [ENERGY] proxy: duty=0.1035%  I_avg=78.102 mA  batt=13 h  | baseline@100Hz: duty=1.0291%  I_avg=79.019 mA  batt=13 h  | savings=1.16%  (active=41758 µs  wait=40296543 µs)
+2026-04-24T10:46:37.858+02:00 [ANOMALY] Z-score:   TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=641)
+2026-04-24T10:46:37.864+02:00 [ANOMALY] Hampel k=5 : TPR=0.000  FPR=0.048  (TP=0 FP=30 FN=0 TN=600)
+2026-04-24T10:46:37.870+02:00 [ANOMALY] Hampel k=20: TPR=0.000  FPR=0.007  (TP=0 FP=4 FN=0 TN=597)
+2026-04-24T10:46:37.876+02:00 [ANOMALY] Hampel k=50: TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=541)
+2026-04-24T10:46:37.884+02:00 [ANOMALY] exec avg — Z-score: 2.40 µs  Hampel k=5: 27.04 µs  k=20: 90.61 µs  k=50: 236.58 µs
+2026-04-24T10:46:37.892+02:00 [ANOMALY] Hampel RAM  k=5: 99 B  k=20: 369 B  k=50: 909 B  (win[]+ref[]+spike[] per instance)
+2026-04-24T10:46:37.910+02:00 [BONUS-SIGNAL] mode=clean spike_pct=0 dominant=5.03 adaptive_fs=10.1 baseline_fs=100.0 window_n=50 baseline_window_n=500 duty_pct=0.1036 i_avg_ma=78.103 savings_pct=1.16 variant=clean_c expected_fmax=7.0
+2026-04-24T10:46:37.936+02:00 [AGG]  win=8  mean=+0.0038  n=50  fs=10.1 Hz  proc_us=94694
+2026-04-24T10:46:37.999+02:00 [ 43251][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:38.513+02:00 [ 43765][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:38.818+02:00 [ 44070][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:39.227+02:00 [ 44480][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:39.639+02:00 [ 44892][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:40.049+02:00 [ 45302][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:40.456+02:00 [ 45709][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:40.872+02:00 [ 46124][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:41.275+02:00 [ 46528][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:41.685+02:00 [ 46938][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:42.095+02:00 [ 47347][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:42.504+02:00 [ 47757][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:42.914+02:00 [ 48166][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:42.947+02:00 [ENERGY] proxy: duty=0.1028%  I_avg=78.102 mA  batt=13 h  | baseline@100Hz: duty=1.0221%  I_avg=79.012 mA  batt=13 h  | savings=1.15%  (active=46736 µs  wait=45411251 µs)
+2026-04-24T10:46:42.952+02:00 [ANOMALY] Z-score:   TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=693)
+2026-04-24T10:46:42.959+02:00 [ANOMALY] Hampel k=5 : TPR=0.000  FPR=0.045  (TP=0 FP=31 FN=0 TN=651)
+2026-04-24T10:46:42.965+02:00 [ANOMALY] Hampel k=20: TPR=0.000  FPR=0.009  (TP=0 FP=6 FN=0 TN=646)
+2026-04-24T10:46:42.971+02:00 [ANOMALY] Hampel k=50: TPR=0.000  FPR=0.000  (TP=0 FP=0 FN=0 TN=592)
+2026-04-24T10:46:42.979+02:00 [ANOMALY] exec avg — Z-score: 2.42 µs  Hampel k=5: 27.16 µs  k=20: 91.01 µs  k=50: 239.28 µs
+2026-04-24T10:46:42.987+02:00 [ANOMALY] Hampel RAM  k=5: 99 B  k=20: 369 B  k=50: 909 B  (win[]+ref[]+spike[] per instance)
+2026-04-24T10:46:43.005+02:00 [BONUS-SIGNAL] mode=clean spike_pct=0 dominant=5.03 adaptive_fs=10.1 baseline_fs=100.0 window_n=50 baseline_window_n=500 duty_pct=0.1028 i_avg_ma=78.102 savings_pct=1.15 variant=clean_c expected_fmax=7.0
+2026-04-24T10:46:43.034+02:00 [AGG]  win=9  mean=+0.0047  n=50  fs=10.1 Hz  proc_us=95948
+2026-04-24T10:46:43.119+02:00 [ 48371][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"
+2026-04-24T10:46:43.327+02:00 [ 48580][E][WiFiClient.cpp:275] connect(): socket error on fd 48, errno: 104, "Connection reset by peer"

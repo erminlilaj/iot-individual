@@ -38,6 +38,7 @@ void setup() {
     Serial.println("[INA219] disabled for this capture run");
     energy_model_init();
     anomaly_init();
+    anomaly_print_config();
 
     // Phase 2 result (one-shot, ~10 ms)
     run_sampling_benchmark();

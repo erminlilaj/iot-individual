@@ -1,6 +1,7 @@
 #include "display.h"
 #include "tasks.h"
 #include "mqtt_client.h"
+#include "sensor.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <U8g2lib.h>
@@ -17,7 +18,7 @@ static U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 static const char* signal_mode_label() {
 #if defined(SIGNAL_MODE) && SIGNAL_MODE == 0
-    return "clean";
+    return clean_signal_variant_label();
 #elif defined(SIGNAL_MODE) && SIGNAL_MODE == 1
     return "noise";
 #elif defined(SIGNAL_MODE) && SIGNAL_MODE == 2

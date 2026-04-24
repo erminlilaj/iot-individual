@@ -14,6 +14,7 @@ firmware/src/lorawan_keys.h
 # Local docs / agent notes not meant for GitHub
 .claude/
 .codex
+README_personal.md
 docs/
 AGENTS.md
 CLAUDE.md

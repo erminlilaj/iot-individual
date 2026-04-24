@@ -1,0 +1,4 @@
+signal_id,variant,formula,session,expected_highest_hz,observed_dominant_hz,adaptive_fs_hz,adapted_window_n,i_avg_proxy_ma,savings_pct,notes
+A,clean_a,"2*sin(2*pi*3*t)+4*sin(2*pi*5*t)",20260422_120509_clean_dut_no_ina219_60s_v2,5.00,5.00,10.00,50,78.067,0.77,"validated baseline; dominant and highest tone align"
+B,clean_b,"4*sin(2*pi*3*t)+2*sin(2*pi*9*t)",20260424_104417_clean_b_dut,9.00,3.01,10.00,50,78.088,1.00,"tracked stronger 3 Hz tone; lower clamp held fs at 10 Hz"
+C,clean_c,"2*sin(2*pi*2*t)+3*sin(2*pi*5*t)+1.5*sin(2*pi*7*t)",20260424_104628_clean_c_dut,7.00,5.03,10.10,50,78.102,1.15,"tracked dominant 5 Hz tone; 7 Hz component did not drive adaptation"

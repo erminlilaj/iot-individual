@@ -253,7 +253,11 @@ class SessionCapture:
         )
         client.on_connect = on_connect
         client.on_message = on_message
-        client.connect(self.args.broker_host, self.args.broker_port, keepalive=60)
+        try:
+            client.connect(self.args.broker_host, self.args.broker_port, keepalive=60)
+        except OSError as exc:
+            print(f"[capture] MQTT disabled for this session: {exc}")
+            return
         client.loop_start()
         try:
             while not self.stop_event.is_set():
