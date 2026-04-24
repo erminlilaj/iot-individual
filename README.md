@@ -27,6 +27,8 @@ Here is the short presentation view of the rubric:
 | WiFi / MQTT | Validated | `5/5` aggregate messages sent and `5/5` received in the canonical session |
 | LoRaWAN / TTN | Observed | `5` uplinks are recorded in the curated run, with end-to-end latency in the `1589-24863 ms` range |
 
+These metrics were chosen because they match the main questions of the assignment in a direct way: how fast the node can sample, whether it adapts correctly, whether aggregation is correct, how much data it sends, how long delivery takes, and whether the two communication paths really work.
+
 ## System Setup
 
 The system uses one ESP32 as the main device under test and one optional monitor ESP32 for external power measurements. The DUT generates the virtual signal in firmware, samples it with FreeRTOS tasks, runs the FFT, computes the `5 s` mean, and publishes the result through MQTT. A second ESP32 plus `INA219` is used only when measuring current and power at the DUT input.
@@ -94,7 +96,11 @@ fs ~ 1 / 1 ms = 1000 Hz
 
 This is the value used in [docs/evaluation/01_max_sampling_frequency.md](docs/evaluation/01_max_sampling_frequency.md). The important point is that `1000 Hz` is the practical ceiling of this FreeRTOS design, while the `~16.6 kHz` figure is only a raw reference for a much tighter loop.
 
+I chose this metric because it gives the upper reference point of the implemented system. Without that reference, it would be harder to explain why adaptive sampling is useful.
+
 ![Maximum sampling rate](images/02_max_sampling_rate.png)
+
+
 
 ### 2. Optimal Frequency / FFT
 
@@ -109,6 +115,8 @@ fs,opt ~ 2 * fmax = 10 Hz
 
 The validated run shows the FFT repeatedly detecting `5.00 Hz` and the adaptive controller repeatedly updating the sampling rate to `10.0 Hz`.
 
+This was done by collecting one FFT window, extracting the dominant peak, and then updating the sampling rate from that result. I use this metric because it directly tests whether the adaptive rule is behaving as intended.
+
 Real log excerpt:
 
 ```text
@@ -120,6 +128,8 @@ Real log excerpt:
 ![FFT spectrum](source/results/20260422_clean_dut_no_ina219_60s_v2/02_fft_spectrum.png)
 
 ![Adaptive sampling history](source/results/20260422_clean_dut_no_ina219_60s_v2/03_adaptive_fs.png)
+
+Together, these two figures tell the central story of the project: the spectrum reveals the `5 Hz` dominant component, and the controller then settles near the expected `10 Hz` operating point.
 
 ### 3. Aggregation
 
@@ -133,6 +143,8 @@ n = fs * 5 s = 10 * 5 = 50 samples
 
 The canonical run shows five consecutive adapted windows with `n=50` at `10.0 Hz`.
 
+This was checked by comparing the observed sample count with the expected `fs * window` count. I use this metric because it is the simplest way to show that the aggregation window is really time-based and not just an average over all stored history.
+
 Real log excerpt:
 
 ```text
@@ -143,6 +155,8 @@ Real log excerpt:
 ```
 
 Once the node has converged to `10 Hz`, a `5 s` window should contain about `50` samples. That is exactly what appears in [source/results/20260422_clean_dut_no_ina219_60s_v2/results_agg.csv](source/results/20260422_clean_dut_no_ina219_60s_v2/results_agg.csv).
+
+This is why the `5 s` window is a practical middle ground here: it is long enough to give a stable mean, but still short enough to keep the system responsive and easy to demonstrate live.
 
 ### 4. Measure Energy
 
@@ -175,6 +189,10 @@ The measured state averages above are the clean summary view. The Better Serial 
 ![Better Serial Plotter power monitor](images/09_serial_plotter_dashboard.png)
 
 The measured run shows that total power is dominated much more by `WIFI_IDLE` and radio transmission than by the sampler alone. This is why the proxy model shows only a small gain in the always-awake WiFi configuration: lowering the sampling rate helps, but it does not remove WiFi overhead.
+
+This metric was chosen because current and power are the most direct energy indicators. They are easier to justify than a single abstract "energy score", especially when the measurement is done externally with the INA219.
+
+In other words, the energy section is not saying adaptive sampling does nothing. It is saying that in this specific always-awake WiFi setup, communication overhead is a bigger cost driver than the sampler by itself.
 
 Important limit of the current evidence:
 
@@ -214,6 +232,10 @@ Real log excerpt:
 
 The node sends one useful summary instead of thousands of raw samples. This is the main reason why local aggregation is valuable in the project.
 
+From a system point of view, this section shows the direct effect of local processing on communication cost: the transmitted payload depends on the aggregate format, not on the number of raw samples originally acquired inside the window.
+
+I chose bytes per window as the main network metric because it is simple: it shows immediately how much communication is saved when the node sends one aggregate instead of the full raw stream.
+
 ### 6. Measure Latency
 
 Both communication paths reuse the same aggregated value from the same `5 s` window. That makes the comparison fair, because MQTT and LoRa are sending the same kind of information instead of different payloads.
@@ -236,11 +258,15 @@ Detailed values are already collected in [docs/evaluation/06_end_to_end_latency.
 
 The MQTT path is local and lightweight, while the LoRaWAN path naturally adds airtime, gateway, and network delays. For MQTT, the publish-to-edge delay is the clearest practical number. For LoRaWAN, the delay is much larger because the radio path and network handling take longer. They should not be treated as one single latency number.
 
+These latency metrics were chosen because they answer different simple questions: how fast the local edge path is, how long a round-trip takes, and how slow the cloud LoRa path is compared with the local one.
+
 ### 7. WiFi / MQTT
 
 I used the `5 s` aggregate as the message payload and sent it from the ESP32 over WiFi to a local MQTT broker. The Python edge listener subscribed to the topic, logged the values, and echoed the ping message used for RTT measurement. This is the cleanest end-to-end path in the repository, so it is the one I would present live first.
 
 The canonical run shows `5/5` WiFi/MQTT messages sent and `5/5` received at the edge listener.
+
+This was done by matching sender-side logs with receiver-side logs for the same window values. I use this metric because successful delivery is more important here than only showing that the publish function was called.
 
 Real send/receive evidence:
 
@@ -253,6 +279,8 @@ recv: 2026-04-22T12:06:03.465+02:00,eri/iot/average,0.0003
 ```
 
 ![Edge server receiving values](images/04_edge_server_receiving.png)
+
+This is the strongest communication evidence in the repo because it gives a direct sender-side and receiver-side match for the same aggregate values, so delivery can be verified without much interpretation.
 
 ### 8. LoRaWAN / TTN
 
@@ -268,6 +296,8 @@ What the curated run shows:
 
 That makes the LoRa result real, but clearly slower and more variable than MQTT.
 
+I chose to report LoRa with uplink count and latency range because those two numbers are the clearest summary of what matters here: it worked, but it is slower and less repeatable than the local WiFi/MQTT path.
+
 These screenshots are the clearest TTN-side proof already stored in the repo:
 
 ![TTN live data](images/07_ttn_live_data.png)
@@ -282,13 +312,15 @@ Short explanation:
 
 ## Bonus
 
-
+The bonus section extends the same pipeline to slightly harder cases. Instead of only checking that the baseline works, it checks how the current adaptive rule behaves when the signal contains multiple tones with different strengths.
 
 ```text
 does the controller follow the highest tone in the signal, or only the dominant FFT peak?
 ```
 
 The main bonus result is a measured three-signal matrix that makes that answer visible.
+
+This was done by running the same pipeline on three different clean formulas and comparing the expected highest tone with the measured dominant tone. I chose these metrics because they reveal a simple limitation of the current rule: it follows the dominant peak, not always the highest-frequency component.
 
 ### 1. Three Clean Signal Variants
 
@@ -391,6 +423,7 @@ stty -F /dev/ttyUSB0 115200 raw cs8 -cstopb -parenb && cat /dev/ttyUSB0
 6. For power measurements, use the separate monitor path described in [tools/power_logs/20260422_141511_summary.md](tools/power_logs/20260422_141511_summary.md) and `tools/monitor_esp32/`.
 
 ## Final Takeaways
+
 
 - The project correctly detects the dominant `5 Hz` component of the clean signal and adapts the sampling rate to `10 Hz`.
 - The aggregate is computed over a real `5 s` time window, and the validated run shows the expected `50` samples per window after adaptation.
