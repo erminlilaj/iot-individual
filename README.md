@@ -31,8 +31,6 @@ Here is the short presentation view of the rubric:
 
 The system uses one ESP32 as the main device under test and one optional monitor ESP32 for external power measurements. The DUT generates the virtual signal in firmware, samples it with FreeRTOS tasks, runs the FFT, computes the `5 s` mean, and publishes the result through MQTT. A second ESP32 plus `INA219` is used only when measuring current and power at the DUT input.
 
-![Hardware setup](images/two_esp32_ina219_setup.png)
-
 Main path:
 
 ```text
@@ -44,6 +42,34 @@ Secondary path:
 ```text
 same 5 s mean -> LoRaWAN / TTN
 ```
+
+High-level view:
+
+```text
++-------------------+      +----------------+      +-------------------+
+| virtual signal    | ---> | FFT + adapt fs | ---> | 5 s aggregation   |
++-------------------+      +----------------+      +-------------------+
+                                                          |         |
+                                                          v         v
+                                                    MQTT edge   LoRaWAN / TTN
+```
+
+## Design Choices And Trade-Offs
+
+These are the main engineering choices that shape the project:
+
+- `10-100 Hz` adaptive clamp: keeps the system responsive and prevents unstable very-low or very-high rates
+- `5 s` aggregation window: a middle ground between stable averages and reasonable update speed
+- MQTT as the main demo path: local, fast, and repeatable
+- LoRaWAN as secondary evidence: real cloud path, but slower and more environment-dependent
+- external `INA219` measurement: more credible for power than only using firmware-side estimates
+
+Main trade-offs:
+
+- shorter aggregation window = faster updates, but noisier results and more traffic
+- longer aggregation window = smoother results, but slower reporting
+- dominant-peak tracking = simple and effective, but it can miss a weaker higher-frequency tone
+- MQTT = stronger for live demo; LoRaWAN = stronger for cloud story
 
 ## Evaluation Results
 
@@ -120,12 +146,11 @@ Once the node has converged to `10 Hz`, a `5 s` window should contain about `50`
 
 ### 4. Measure Energy
 
-I kept the energy discussion in two layers so the claim stays honest:
-
-- a firmware proxy model for quick reasoning
-- a measured external `INA219` run for real electrical evidence
-
 The measured run is summarized in [tools/power_logs/20260422_141511_summary.md](tools/power_logs/20260422_141511_summary.md).
+
+The hardware used for this measurement is shown below: one ESP32 runs the project and a second ESP32 with `INA219` monitors the DUT input externally.
+
+![Hardware setup](images/two_esp32_ina219_setup.png)
 
 Measured values from the `60 s` external monitor run:
 
@@ -325,6 +350,7 @@ bonus finding: the current rule follows the dominant peak, not always the highes
 ```
 
 Measured bonus details are collected in [docs/evaluation/12_bonus_signal_matrix.md](docs/evaluation/12_bonus_signal_matrix.md), [tools/bonus_results/clean_signal_matrix_20260424.md](tools/bonus_results/clean_signal_matrix_20260424.md), and [source/results/20260424_clean_signal_matrix_plots/SUMMARY.md](source/results/20260424_clean_signal_matrix_plots/SUMMARY.md).
+
 
 ## How To Reproduce
 
