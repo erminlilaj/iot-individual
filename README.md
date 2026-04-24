@@ -24,7 +24,7 @@ Here is the short presentation view of the rubric:
 | Measure Energy | Partial | External `INA219` run shows `150.67 mA` average, but a matched adaptive-vs-fixed-rate A/B run is not yet measured |
 | Measure Network | Validated | One aggregate is `6-7 B` instead of a `20000 B` raw 5-second float stream |
 | Measure Latency | Validated | MQTT publish-to-edge mean `98.4 ms`, MQTT RTT mean `630.6 ms`, LoRa mean `11829.2 ms` |
-| MQTT | Validated | `5/5` aggregate messages sent and `5/5` received in the canonical session |
+| WiFi / MQTT | Validated | `5/5` aggregate messages sent and `5/5` received in the canonical session |
 | LoRaWAN / TTN | Observed | `5` uplinks are recorded in the curated run, with end-to-end latency in the `1589-24863 ms` range |
 
 ## System Setup
@@ -216,7 +216,11 @@ The node sends one useful summary instead of thousands of raw samples. This is t
 
 ### 6. Measure Latency
 
-I kept three latency views separate, because they do not mean the same thing:
+Both communication paths reuse the same aggregated value from the same `5 s` window. That makes the comparison fair, because MQTT and LoRa are sending the same kind of information instead of different payloads.
+
+I also keep latency and aggregation separate on purpose. The `5 s` window tells me how often a result is created. Latency tells me how long one created result needs to travel after it is ready.
+
+So I kept three latency views separate, because they do not mean the same thing:
 
 - MQTT publish-to-edge receive delay
 - MQTT ping-pong RTT
@@ -230,13 +234,13 @@ I kept three latency views separate, because they do not mean the same thing:
 
 Detailed values are already collected in [docs/evaluation/06_end_to_end_latency.md](docs/evaluation/06_end_to_end_latency.md) and in the canonical result bundle.
 
-The MQTT path is local and lightweight, while the LoRaWAN path naturally adds airtime, gateway, and network delays. They should not be treated as one single latency number.
+The MQTT path is local and lightweight, while the LoRaWAN path naturally adds airtime, gateway, and network delays. For MQTT, the publish-to-edge delay is the clearest practical number. For LoRaWAN, the delay is much larger because the radio path and network handling take longer. They should not be treated as one single latency number.
 
-### 7. MQTT
+### 7. WiFi / MQTT
 
-I used the `5 s` aggregate as the message payload and sent it from the ESP32 to a local broker. The Python edge listener subscribed to the topic, logged the values, and echoed the ping message used for RTT measurement. This is the cleanest end-to-end path in the repository, so it is the one I would present live first.
+I used the `5 s` aggregate as the message payload and sent it from the ESP32 over WiFi to a local MQTT broker. The Python edge listener subscribed to the topic, logged the values, and echoed the ping message used for RTT measurement. This is the cleanest end-to-end path in the repository, so it is the one I would present live first.
 
-The canonical run shows `5/5` MQTT messages sent and `5/5` received at the edge listener.
+The canonical run shows `5/5` WiFi/MQTT messages sent and `5/5` received at the edge listener.
 
 Real send/receive evidence:
 
@@ -253,6 +257,8 @@ recv: 2026-04-22T12:06:03.465+02:00,eri/iot/average,0.0003
 ### 8. LoRaWAN / TTN
 
 I keep LoRaWAN as a secondary path in the presentation: it is implemented and observed, but it is much more dependent on gateway coverage and join conditions than the local MQTT path.
+
+The same `5 s` aggregate used for MQTT is also reused for LoRaWAN. This keeps the communication comparison simple: only the transport path changes, not the local processing step.
 
 What the curated run shows:
 
@@ -276,7 +282,7 @@ Short explanation:
 
 ## Bonus
 
-Peer repos usually keep the bonus section short and experiment-oriented, so I do the same here. The goal of my bonus work is not to build a second project, but to answer one extra question clearly:
+
 
 ```text
 does the controller follow the highest tone in the signal, or only the dominant FFT peak?
