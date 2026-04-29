@@ -376,19 +376,6 @@ Why this plot matters:
 
 So even in the more complex case, the controller still behaves like a dominant-tone tracker.
 
-### 2. Anomaly Filtering
-
-The firmware also includes Z-score and Hampel-based anomaly filtering for spike-like disturbances. This is a good bonus topic because it adds an extra local-processing layer on top of the main sampling and aggregation pipeline. The related notes are collected in [docs/evaluation/13_bonus_anomaly_filtering.md](docs/evaluation/13_bonus_anomaly_filtering.md).
-
-Good short message for the bonus slide:
-
-```text
-main path: clean signal -> FFT -> adaptive fs -> aggregation -> MQTT
-bonus finding: the current rule follows the dominant peak, not always the highest tone
-```
-
-Measured bonus details are collected in [docs/evaluation/12_bonus_signal_matrix.md](docs/evaluation/12_bonus_signal_matrix.md), [tools/bonus_results/clean_signal_matrix_20260424.md](tools/bonus_results/clean_signal_matrix_20260424.md), and [source/results/20260424_clean_signal_matrix_plots/SUMMARY.md](source/results/20260424_clean_signal_matrix_plots/SUMMARY.md).
-
 
 ## How To Reproduce
 
