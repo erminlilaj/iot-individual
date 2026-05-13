@@ -175,6 +175,22 @@ The second value is the current FreeRTOS-paced application ceiling. The real sam
 
 The difference matters because raw benchmark speed and full-application scheduled speed are not the same metric. The raw value shows the fast ceiling. The `1000 Hz` value explains why the current task loop cannot actually schedule samples faster than one per millisecond.
 
+Implementation excerpt from [firmware/src/benchmark.cpp](firmware/src/benchmark.cpp):
+
+```cpp
+// Raw benchmark: virtual sensor generation with no scheduler delay.
+for (int i = 0; i < RAW_NUM_SAMPLES; i++) {
+    raw_accumulator += generate_sample(t);
+    t += raw_dt;
+}
+
+// Task-paced benchmark: same 1 ms floor as the FreeRTOS sampler.
+for (int i = 0; i < TASK_NUM_SAMPLES; i++) {
+    task_accumulator += (uint32_t)analogRead(BENCH_ADC_PIN);
+    vTaskDelay(pdMS_TO_TICKS(1));
+}
+```
+
 ```text
 raw virtual-sensor ceiling = 56561 Hz  (17.68 us/sample)
 task-paced sampler ceiling =   999 Hz  (1.00 ms/sample)
@@ -189,11 +205,53 @@ task margin vs target      =    25x
 
 The clean signal contains `3 Hz` and `5 Hz` components. The `5 Hz` component has the larger amplitude, so the FFT should find `5 Hz` as the dominant frequency.
 
+The reference signal is generated directly in [firmware/src/sensor.cpp](firmware/src/sensor.cpp):
+
+```cpp
+float generate_sample(float t_seconds) {
+    float c3hz = 2.0f * sinf(TWO_PI * 3.0f * t_seconds);
+    float c5hz = 4.0f * sinf(TWO_PI * 5.0f * t_seconds);
+    return c3hz + c5hz;
+}
+```
+
 This is the central validation point of the project. Because the expected answer is known before the run, the FFT result is not just a random number from a black box: it can be checked directly against the signal formula.
 
 ```text
 dominant = 5.00 Hz
 adaptive fs = 8 * dominant = 40.0 Hz
+```
+
+The sampler reads the current adaptive rate each cycle, generates one virtual sample, then advances virtual time by `1 / fs`:
+
+```cpp
+xSemaphoreTake(g_fs_mutex, portMAX_DELAY);
+float fs = g_fs_current;
+xSemaphoreGive(g_fs_mutex);
+
+float raw = generate_sample(t);
+t += 1.0f / fs;
+```
+
+The FFT task converts the detected peak into the next sampling rate:
+
+```cpp
+double dominant = fft.majorPeak();
+
+float new_fs = (float)dominant * TASKS_ADAPTIVE_OVERSAMPLING_FACTOR;
+new_fs = round_to_step(new_fs, TASKS_ADAPTIVE_STEP_HZ);
+new_fs = clamp_float(new_fs, TASKS_ADAPTIVE_MIN_FS_HZ, TASKS_ADAPTIVE_MAX_FS_HZ);
+
+g_fs_current = new_fs;
+```
+
+The current FreeRTOS timing is millisecond-paced:
+
+```cpp
+uint32_t ms = (uint32_t)(1000.0f / fs);
+if (ms == 0) ms = 1;
+
+vTaskDelay(pdMS_TO_TICKS(ms));
 ```
 
 Real log pattern:
@@ -210,6 +268,15 @@ The aggregate is the mean over the latest `5 s` of samples. After adaptation:
 
 ```text
 n = fs * window = 40 Hz * 5 s = 200 samples
+```
+
+The aggregation task wakes every `5 s`, computes the target sample count from the current `fs`, and averages the newest samples from the ring buffer:
+
+```cpp
+vTaskDelay(pdMS_TO_TICKS(5000));
+
+uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
+float mean = ring_buffer_mean_last(target_samples);
 ```
 
 The previous canonical run showed five consecutive adapted windows with `n=50` under the old `10 Hz` policy. The fresh `2026-05-13` capture confirms the current new-fixes policy with `14` parsed windows, all at `n=200` and `fs=40.0 Hz`.
@@ -229,6 +296,20 @@ This is also the main reason the project saves network traffic. The node does no
 The MQTT path publishes one aggregate value per window to `eri/iot/average`. The edge server receives the aggregate and echoes `eri/iot/ping` on `eri/iot/pong` for RTT measurement.
 
 MQTT is the best live-demo path because it has two visible sides: the ESP32 serial log shows the send event, and the Python edge listener shows the received value. Matching those two logs proves delivery more clearly than only showing a successful `publish()` call.
+
+The current firmware keeps the old compact average topic and also publishes a metadata-rich JSON aggregate:
+
+```cpp
+snprintf(json_buf, sizeof(json_buf),
+         "{\"window\":%lu,\"mean\":%.4f,\"samples\":%u,"
+         "\"fs_hz\":%.1f,\"dominant_hz\":%.2f,\"rtt_ms\":%lld}",
+         window_id,
+         mean,
+         sample_count,
+         fs_hz,
+         dominant_hz,
+         s_last_rtt_ms);
+```
 
 Canonical run:
 
@@ -256,6 +337,13 @@ recv: 2026-04-22T12:05:16.997+02:00,eri/iot/average,0.0006
 LoRaWAN sends the same aggregate mean through the Heltec SX1262 radio using RadioLib `6.6.0`. This path is validated as observed evidence, but it is less repeatable than local MQTT because TTN coverage and radio timing dominate the result.
 
 The LoRaWAN numbers should be interpreted differently from MQTT. MQTT demonstrates nearby edge processing with low latency. LoRaWAN demonstrates long-range cloud uplink, where slower and more variable delivery is expected and acceptable for infrequent summaries.
+
+Both communication paths receive the same aggregate result from [firmware/src/aggregator.cpp](firmware/src/aggregator.cpp):
+
+```cpp
+lorawan_send(mean);
+mqtt_send(mean, window_count, n, fs, g_last_fft_dominant_hz);
+```
 
 Canonical run:
 
