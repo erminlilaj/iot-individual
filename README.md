@@ -10,10 +10,18 @@ s(t) = 2*sin(2*pi*3*t) + 4*sin(2*pi*5*t)
 
 The clean signal has a dominant `5 Hz` component. The firmware detects that frequency with an FFT and now uses a conservative production-style policy: `8x` oversampling, rounded to practical steps. For the main signal, that means `5 Hz * 8 = 40 Hz`, then a `5 s` aggregate is transmitted instead of raw samples.
 
+## What To Look At First
+
+- Signal: `3 Hz + 5 Hz`, with `5 Hz` dominant.
+- Adaptive result: FFT reports about `5.02 Hz`, so sampling becomes `40.0 Hz`.
+- Aggregation result: `40 Hz * 5 s = 200` samples per window.
+- Max benchmark: raw virtual-sensor ceiling `56561 Hz`; FreeRTOS-paced ceiling `999 Hz`.
+
 ![FFT spectrum](source/results/20260422_clean_dut_no_ina219_60s_v2/02_fft_spectrum.png)
 
 ## Table Of Contents
 
+- [What To Look At First](#what-to-look-at-first)
 - [Current Status](#current-status)
 - [Assignment Coverage](#assignment-coverage)
 - [System Architecture](#system-architecture)
@@ -51,7 +59,7 @@ The best technical explanation pack is:
 
 Read the results in two layers. The first layer is the core correctness path: the signal is known, the FFT finds the expected `5 Hz` component, the sampler adapts using the configured policy, and the `5 s` aggregate contains `fs * 5` samples. The second layer is the system-performance path: the same aggregate is sent through MQTT and LoRaWAN, then evaluated for payload size, latency, and power behavior.
 
-The historical validated result bundle in this repository was captured with the earlier Nyquist-style `2x` policy (`5 Hz -> 10 Hz`, `50` samples per window). A fresh `2026-05-13` clean capture now confirms the current conservative `8x` policy for the local processing path: the FFT repeatedly reports `5.02 Hz`, the adaptive rate stays at `40.0 Hz`, and each `5 s` aggregation window contains `200` samples. MQTT and LoRa delivery still rely on the older validated bundle until a broker-reachable fresh capture is made.
+The fresh `2026-05-13` clean capture confirms the current conservative `8x` policy for the local processing path: the FFT repeatedly reports `5.02 Hz`, the adaptive rate stays at `40.0 Hz`, and each `5 s` aggregation window contains `200` samples. MQTT and LoRa delivery still rely on the older validated bundle until a broker-reachable fresh capture is made.
 
 ## Assignment Coverage
 
@@ -203,6 +211,15 @@ task margin vs target      =    25x
 
 The clean signal contains `3 Hz` and `5 Hz` components. The `5 Hz` component has the larger amplitude, so the FFT should find `5 Hz` as the dominant frequency.
 
+These frequency terms are separate and should not be mixed:
+
+| Term | Value | Meaning |
+| --- | ---: | --- |
+| Signal frequencies | `3 Hz`, `5 Hz` | Frequencies inside the generated input signal |
+| Dominant frequency | about `5.02 Hz` | Strongest component detected by the FFT |
+| Runtime sampling frequency | `50 Hz -> 40 Hz` | How often the ESP32 samples the virtual signal |
+| Maximum benchmark frequency | `56561 Hz` raw / `999 Hz` task-paced | Capability measurements, not the normal operating rate |
+
 The reference signal is generated directly in [firmware/src/sensor.cpp](firmware/src/sensor.cpp):
 
 ```cpp
@@ -218,6 +235,14 @@ This is the central validation point of the project. Because the expected answer
 ```text
 dominant = 5.00 Hz
 adaptive fs = 8 * dominant = 40.0 Hz
+```
+
+Nyquist says a `5 Hz` signal needs at least `10 Hz` sampling in an ideal case. This firmware uses a more conservative `8x` policy for the real pipeline. It gives cleaner FFT windows and more timing margin while FreeRTOS tasks, queues, aggregation, MQTT, LoRaWAN attempts, display updates, and anomaly modes are also running. It still reduces work compared with the fixed `50 Hz` baseline:
+
+```text
+Nyquist minimum: 5 Hz -> 10 Hz
+current policy:  5 Hz -> 40 Hz
+baseline:        50 Hz
 ```
 
 The sampler reads the current adaptive rate each cycle, generates one virtual sample, then advances virtual time by `1 / fs`:
