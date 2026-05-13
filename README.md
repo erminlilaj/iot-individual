@@ -45,7 +45,7 @@ The best single evidence bundle is:
 
 - [source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md](source/results/20260422_clean_dut_no_ina219_60s_v2/SUMMARY.md)
 
-The best explanation pack is:
+The best technical explanation pack is:
 
 - [docs/evaluation/00_master_scoreboard.md](docs/evaluation/00_master_scoreboard.md)
 - [docs/defense_notes.md](docs/defense_notes.md)
@@ -58,7 +58,7 @@ The historical validated result bundle in this repository was captured with the 
 
 | Requirement | Current result | Evidence | Status |
 | --- | --- | --- | --- |
-| Maximum sampling frequency | Practical FreeRTOS sampler ceiling about `1000 Hz`; separate raw `analogRead()` reference near `16.6 kHz` | [docs/evaluation/01_max_sampling_frequency.md](docs/evaluation/01_max_sampling_frequency.md), [images/02_max_sampling_rate.png](images/02_max_sampling_rate.png) | Validated |
+| Maximum sampling frequency | Fresh ESP32 boot benchmark: raw virtual-sensor ceiling `56561 Hz`; FreeRTOS-paced application ceiling `999 Hz` | [firmware/src/benchmark.cpp](firmware/src/benchmark.cpp), [docs/evaluation/01_max_sampling_frequency.md](docs/evaluation/01_max_sampling_frequency.md) | Freshly captured |
 | FFT and adaptive sampling | Current policy: FFT detects `5.02 Hz`; adaptive target becomes `40.0 Hz` (`8x`) | [firmware/src/tasks.cpp](firmware/src/tasks.cpp), [tools/plot_sessions/20260513_090512_clean_40hz_new-fixes_retry/SUMMARY.md](tools/plot_sessions/20260513_090512_clean_40hz_new-fixes_retry/SUMMARY.md) | Freshly captured |
 | Window aggregation | Current policy: `5 s` window at `40 Hz` gives `200` samples | [firmware/src/aggregator.cpp](firmware/src/aggregator.cpp), [tools/plot_sessions/20260513_090512_clean_40hz_new-fixes_retry/agg.csv](tools/plot_sessions/20260513_090512_clean_40hz_new-fixes_retry/agg.csv) | Freshly captured |
 | MQTT over WiFi | `5/5` aggregate messages matched at edge listener | [source/results/20260422_clean_dut_no_ina219_60s_v2/data/mqtt_send.csv](source/results/20260422_clean_dut_no_ina219_60s_v2/data/mqtt_send.csv), [source/results/20260422_clean_dut_no_ina219_60s_v2/data/mqtt_rx.csv](source/results/20260422_clean_dut_no_ina219_60s_v2/data/mqtt_rx.csv) | Validated |
@@ -141,7 +141,7 @@ tools/
   power_logs/           measured current/power outputs
 docs/
   evaluation/           rubric-oriented lab notebooks
-  defense_notes.md      professor-facing oral defense guide
+  defense_notes.md      detailed project explanation guide
 source/results/         curated result bundles and plots
 images/                 screenshots used by README and report
 ```
@@ -167,13 +167,20 @@ images/                 screenshots used by README and report
 
 ### 1. Maximum Sampling Frequency
 
-The practical ceiling of the implemented FreeRTOS sampler is about `1000 Hz`, because the sampler uses `vTaskDelay()` with a `1 ms` minimum delay. A separate raw `analogRead()` reference is near `16.6 kHz`, but the defendable project number is the task-based ceiling because it reflects the actual firmware design.
+The benchmark now reports two different ceilings because they answer different questions.
 
-The difference matters because raw ADC speed and full-application sampling speed answer different questions. The raw reference says what the hardware can do in a tight loop. The `1000 Hz` result says what this project can schedule while still running the FreeRTOS pipeline around it.
+The first value is the raw virtual-sensor generation rate: a tight loop calls `generate_sample()` as fast as possible, without waiting for the FreeRTOS scheduler. In the fresh ESP32 boot capture, this measured `56561 Hz`.
+
+The second value is the current FreeRTOS-paced application ceiling. The real sampler in [firmware/src/tasks.cpp](firmware/src/tasks.cpp) still uses `vTaskDelay()` with a `1 ms` minimum delay, so the current task-timed pipeline measured `999 Hz`.
+
+The difference matters because raw benchmark speed and full-application scheduled speed are not the same metric. The raw value shows the fast ceiling. The `1000 Hz` value explains why the current task loop cannot actually schedule samples faster than one per millisecond.
 
 ```text
-task-based sampler ceiling ~= 1 / 1 ms = 1000 Hz
-raw analogRead reference ~= 16662 Hz
+raw virtual-sensor ceiling = 56561 Hz  (17.68 us/sample)
+task-paced sampler ceiling =   999 Hz  (1.00 ms/sample)
+current adaptive target    =    40 Hz  (5 Hz signal * 8x policy)
+raw margin vs target       =  1414x
+task margin vs target      =    25x
 ```
 
 ![Maximum sampling rate](images/02_max_sampling_rate.png)
@@ -431,7 +438,7 @@ Expected log prefixes:
 
 ## Presentation Walkthrough
 
-Use this order for a short defense:
+Use this order for a short project walkthrough:
 
 1. Show the signal formula and explain that it is generated in [firmware/src/sensor.cpp](firmware/src/sensor.cpp).
 2. Show the FFT plot: the dominant component is `5 Hz`.
