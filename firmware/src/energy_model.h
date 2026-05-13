@@ -6,7 +6,7 @@
 // sleep, so deep-sleep numbers would be misleading here.
 static constexpr float CURRENT_ACTIVE_MA = 177.0f;  // observed burst current
 static constexpr float CURRENT_IDLE_MA   =  78.0f;  // observed steady idle current
-static constexpr float BASELINE_FS_HZ    = 100.0f;  // oversampled baseline used by the app
+static constexpr float BASELINE_FS_HZ    =  50.0f;  // fixed-rate baseline used by the app
 
 void  energy_model_init();
 void  energy_model_record_active(uint32_t us);  // µs spent computing a sample

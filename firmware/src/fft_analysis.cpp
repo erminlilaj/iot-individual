@@ -50,7 +50,7 @@ float compute_optimal_fs(float fs_current) {
     Serial.println(" Hz  (expected: 5.00 Hz)");
     Serial.print("  Optimal fs (2×f_dom)    : ");
     Serial.print(optimal_fs, 1);
-    Serial.println(" Hz  (expected: 10.0 Hz)");
+    Serial.println(" Hz  (Nyquist minimum: 10.0 Hz; app target: 40.0 Hz)");
     Serial.println("──────────────────────────────");
 
     return optimal_fs;
@@ -61,8 +61,8 @@ void compute_fft_contamination_report(float /*fs*/, float* out_raw, float* out_f
     static double flt_r[N], flt_i[N];
     static float samples[N];
     // Use a fixed 100 Hz rate so both the 3 Hz and 5 Hz components sit well
-    // within the spectrum (far from Nyquist). At the adaptive 10 Hz rate the
-    // 5 Hz component falls exactly on Nyquist and is undetectable by majorPeak().
+    // within the spectrum (far from Nyquist). At the old adaptive 10 Hz rate the
+    // 5 Hz component fell exactly on Nyquist and was hard for majorPeak().
     const float fs = 100.0f;
     float t = 0.0f, dt = 1.0f / fs;
 

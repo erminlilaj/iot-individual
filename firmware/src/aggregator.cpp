@@ -14,7 +14,7 @@
 
 // ── Ring buffer ───────────────────────────────────────────────────────────────
 
-static const uint16_t RING_SIZE = 1000;   // covers 10 s at 100 Hz or ~99 s at 10 Hz
+static const uint16_t RING_SIZE = 1000;   // covers 20 s at 50 Hz or 25 s at 40 Hz
 
 static float        ring[RING_SIZE];
 static uint16_t     head  = 0;    // next write position
@@ -144,7 +144,7 @@ static void aggregator_task(void*) {
         anomaly_print_window_analysis(fs);
         display_update(fs, mean, n, lorawan_is_joined(), mqtt_is_connected(), window_count);
         lorawan_send(mean);
-        mqtt_send(mean);
+        mqtt_send(mean, window_count, n, fs, g_last_fft_dominant_hz);
 
         uint32_t proc_us = micros() - t_start;
 
@@ -154,6 +154,7 @@ static void aggregator_task(void*) {
 }
 
 void start_aggregator_task() {
-    // Core 0, 4 KB stack — arithmetic only, no heavy compute
-    xTaskCreatePinnedToCore(aggregator_task, "aggregator", 8192, nullptr, 1, nullptr, 0);
+    // Core 0. This task prints anomaly stats, updates display, and builds
+    // communication payloads, so keep a generous stack margin.
+    xTaskCreatePinnedToCore(aggregator_task, "aggregator", 16384, nullptr, 1, nullptr, 0);
 }

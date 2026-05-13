@@ -4,6 +4,11 @@
 #include <stdint.h>
 
 static constexpr uint16_t TASKS_FFT_N = 256;
+static constexpr float TASKS_INITIAL_FS_HZ = 50.0f;
+static constexpr float TASKS_ADAPTIVE_OVERSAMPLING_FACTOR = 8.0f;
+static constexpr float TASKS_ADAPTIVE_MIN_FS_HZ = 20.0f;
+static constexpr float TASKS_ADAPTIVE_MAX_FS_HZ = 50.0f;
+static constexpr float TASKS_ADAPTIVE_STEP_HZ = 5.0f;
 
 // Start the sampler task (Core 0) and FFT task (Core 1).
 void start_tasks();

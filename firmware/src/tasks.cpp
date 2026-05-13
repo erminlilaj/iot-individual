@@ -11,7 +11,7 @@
 
 // ── Shared state ─────────────────────────────────────────────────────────────
 
-volatile float    g_fs_current      = 100.0f;
+volatile float    g_fs_current      = TASKS_INITIAL_FS_HZ;
 volatile float    g_last_fft_dominant_hz = 0.0f;
 SemaphoreHandle_t g_fs_mutex;
 volatile int64_t  g_window_start_us = 0;
@@ -68,6 +68,17 @@ static void emit_plot_capture(uint32_t seq) {
     Serial.println();
 }
 #endif
+
+static float clamp_float(float value, float min_value, float max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static float round_to_step(float value, float step) {
+    if (step <= 0.0f) return value;
+    return roundf(value / step) * step;
+}
 
 // ── Sampler task (Core 0) ─────────────────────────────────────────────────────
 
@@ -128,7 +139,7 @@ static void sampler_task(void*) {
         }
 
         // Sleep for one sample interval.
-        // vTaskDelay has 1 ms resolution, which is fine for our rates (≥ 10 Hz = 100 ms).
+        // vTaskDelay has 1 ms resolution, which is fine for our 20-50 Hz range.
         uint32_t ms = (uint32_t)(1000.0f / fs);
         if (ms == 0) ms = 1;
         uint32_t t1 = micros();
@@ -169,17 +180,18 @@ static void fft_task(void*) {
         double dominant = fft.majorPeak();
         g_last_fft_dominant_hz = (float)dominant;
 
-        // Nyquist minimum; clamp to [10, 100] Hz
-        float new_fs = 2.0f * (float)dominant;
-        if (new_fs < 10.0f)  new_fs = 10.0f;
-        if (new_fs > 100.0f) new_fs = 100.0f;
+        // Conservative production-style policy: oversample the dominant peak,
+        // snap to practical steps, then clamp to the supported runtime range.
+        float new_fs = (float)dominant * TASKS_ADAPTIVE_OVERSAMPLING_FACTOR;
+        new_fs = round_to_step(new_fs, TASKS_ADAPTIVE_STEP_HZ);
+        new_fs = clamp_float(new_fs, TASKS_ADAPTIVE_MIN_FS_HZ, TASKS_ADAPTIVE_MAX_FS_HZ);
 
         xSemaphoreTake(g_fs_mutex, portMAX_DELAY);
         g_fs_current = new_fs;
         xSemaphoreGive(g_fs_mutex);
 
-        Serial.printf("[FFT]  dominant = %.2f Hz  →  fs updated to %.1f Hz\n",
-                      (float)dominant, new_fs);
+        Serial.printf("[FFT]  dominant = %.2f Hz  policy=%.1fx  ->  fs updated to %.1f Hz\n",
+                      (float)dominant, TASKS_ADAPTIVE_OVERSAMPLING_FACTOR, new_fs);
 
 #if defined(PLOT_CAPTURE)
         emit_plot_capture(seq);

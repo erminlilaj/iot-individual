@@ -58,9 +58,10 @@ static float median_abs_deviation(const float* arr, uint8_t n, float med) {
 }
 
 static float clamp_adaptive_fs(float dominant_hz) {
-    float fs = 2.0f * dominant_hz;
-    if (fs < 10.0f) fs = 10.0f;
-    if (fs > 100.0f) fs = 100.0f;
+    float fs = dominant_hz * TASKS_ADAPTIVE_OVERSAMPLING_FACTOR;
+    fs = roundf(fs / TASKS_ADAPTIVE_STEP_HZ) * TASKS_ADAPTIVE_STEP_HZ;
+    if (fs < TASKS_ADAPTIVE_MIN_FS_HZ) fs = TASKS_ADAPTIVE_MIN_FS_HZ;
+    if (fs > TASKS_ADAPTIVE_MAX_FS_HZ) fs = TASKS_ADAPTIVE_MAX_FS_HZ;
     return fs;
 }
 
@@ -136,12 +137,13 @@ const char* anomaly_signal_family() {
 
 void anomaly_print_config() {
     Serial.printf(
-        "[BONUS-CONFIG] mode=%s noise_sigma=%.2f spike_pct=%u spike_dist=signed_uniform_%.1f_%.1f baseline_fs=100 fft_n=%u variant=%s expected_fmax=%.1f formula=%s\n",
+        "[BONUS-CONFIG] mode=%s noise_sigma=%.2f spike_pct=%u spike_dist=signed_uniform_%.1f_%.1f baseline_fs=%.0f fft_n=%u variant=%s expected_fmax=%.1f formula=%s\n",
         anomaly_signal_family(),
         BONUS_NOISE_SIGMA,
         (unsigned int)((strcmp(anomaly_signal_family(), "spikes") == 0) ? ANOMALY_SPIKE_PROB_PCT : 0),
         SPIKE_AMPLITUDE_MIN,
         SPIKE_AMPLITUDE_MAX,
+        TASKS_INITIAL_FS_HZ,
         (unsigned int)TASKS_FFT_N,
         clean_signal_variant_label(),
         clean_signal_variant_expected_fmax_hz(),

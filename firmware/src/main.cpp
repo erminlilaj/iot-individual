@@ -14,7 +14,7 @@
 //   1. Flash this firmware
 //   2. Open Serial Monitor at 115200 baud
 //   3. Watch for [FFT] lines — after the first window (2.56 s) the rate
-//      drops from 100 Hz to ~10 Hz and then stays there.
+//      drops from 50 Hz to ~40 Hz and then stays there.
 
 #include "esp_pm.h"
 

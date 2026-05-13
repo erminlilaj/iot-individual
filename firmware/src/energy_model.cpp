@@ -55,7 +55,7 @@ void energy_model_print(float current_fs_hz) {
     float i_avg  = d * CURRENT_ACTIVE_MA + (1.0f - d) * CURRENT_IDLE_MA;
     float hours  = energy_model_battery_hours(1000.0f);  // assume 1000 mAh cell
 
-    // Compare against the app's original 100 Hz oversampled baseline.
+    // Compare against the app's fixed 50 Hz baseline.
     // Sampling work is assumed to scale linearly with sample rate.
     float scale   = (current_fs_hz > 0.0f) ? (BASELINE_FS_HZ / current_fs_hz) : 1.0f;
     float d_over  = d * scale;

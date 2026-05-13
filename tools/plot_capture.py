@@ -26,10 +26,11 @@ import paho.mqtt.client as mqtt
 import serial
 
 TOPIC_AVG = "eri/iot/average"
+TOPIC_AGG = "eri/iot/aggregate"
 TOPIC_PONG = "eri/iot/pong"
 
 RE_FFT = re.compile(
-    r"\[FFT\]\s+dominant = ([\d.]+) Hz\s+→\s+fs updated to ([\d.]+) Hz"
+    r"\[FFT\]\s+dominant = ([\d.]+) Hz(?:\s+policy=([\d.]+)x)?\s+(?:→|->)\s+fs updated to ([\d.]+) Hz"
 )
 RE_AGG = re.compile(
     r"\[AGG\].*win=(\d+).*mean=([+\-\d.]+).*n=(\d+).*fs=([\d.]+).*proc_us=(\d+)"
@@ -41,6 +42,11 @@ RE_LORA = re.compile(
 )
 RE_MQTT = re.compile(
     r"\[MQTT\]\s+#(\d+)\s+avg=([+\-\d.]+)\s+payload=(\d+) B\s+total=(\d+) B\s+baseline=(\d+) B\s+ratio=([\d.]+)x"
+)
+RE_MQTT_RICH = re.compile(
+    r"\[MQTT\]\s+#(\d+)\s+win=(\d+)\s+avg=([+\-\d.]+)\s+"
+    r"avg_payload=(\d+) B\s+json_payload=(\d+) B\s+payload=(\d+) B\s+"
+    r"total=(\d+) B\s+baseline=(\d+) B\s+ratio=([\d.]+)x"
 )
 RE_PLOT_HEADER = re.compile(
     r"\[PLOT\]\s+type=fft_window\s+seq=(\d+)\s+fs=([\d.]+)\s+n=(\d+)"
@@ -66,7 +72,7 @@ class SessionCapture:
 
         self.fft_writer, self.fft_file = self._open_csv(
             "fft.csv",
-            ["iso_time", "dominant_hz", "fs_hz"],
+            ["iso_time", "dominant_hz", "policy_x", "fs_hz"],
         )
         self.agg_writer, self.agg_file = self._open_csv(
             "agg.csv",
@@ -81,7 +87,10 @@ class SessionCapture:
             [
                 "iso_time",
                 "message_index",
+                "window",
                 "avg",
+                "avg_payload_bytes",
+                "json_payload_bytes",
                 "payload_bytes",
                 "total_bytes",
                 "baseline_bytes",
@@ -151,7 +160,7 @@ class SessionCapture:
         self.raw_serial.write(f"{stamp} {line}\n")
 
         if m := RE_FFT.search(line):
-            self.fft_writer.writerow([stamp, m.group(1), m.group(2)])
+            self.fft_writer.writerow([stamp, m.group(1), m.group(2) or "", m.group(3)])
             return
 
         if m := RE_AGG.search(line):
@@ -184,12 +193,32 @@ class SessionCapture:
             )
             return
 
-        if m := RE_MQTT.search(line):
+        if m := RE_MQTT_RICH.search(line):
             self.mqtt_send_writer.writerow(
                 [
                     stamp,
                     m.group(1),
                     m.group(2),
+                    m.group(3),
+                    m.group(4),
+                    m.group(5),
+                    m.group(6),
+                    m.group(7),
+                    m.group(8),
+                    m.group(9),
+                ]
+            )
+            return
+
+        if m := RE_MQTT.search(line):
+            self.mqtt_send_writer.writerow(
+                [
+                    stamp,
+                    m.group(1),
+                    "",
+                    m.group(2),
+                    "",
+                    "",
                     m.group(3),
                     m.group(4),
                     m.group(5),
@@ -240,6 +269,7 @@ class SessionCapture:
                 print(f"[capture] MQTT connect failed: {reason_code}")
                 return
             client.subscribe(TOPIC_AVG)
+            client.subscribe(TOPIC_AGG)
             client.subscribe(TOPIC_PONG)
 
         def on_message(_client, _userdata, msg):

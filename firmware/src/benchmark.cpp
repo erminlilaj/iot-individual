@@ -9,6 +9,8 @@ static constexpr int BENCH_ADC_PIN = 1;
 
 void run_sampling_benchmark() {
     const int NUM_SAMPLES = 1000;
+    const float nyquist_fs_hz = 10.0f;
+    const float app_target_fs_hz = 40.0f;
 
     // Prevents dead-code elimination — compiler must keep the loop.
     uint32_t accumulator = 0;
@@ -43,11 +45,12 @@ void run_sampling_benchmark() {
     Serial.println();
     Serial.println("  ── What this means ─────────────────");
     Serial.printf ("  Bottleneck: FreeRTOS scheduler tick (1 ms minimum delay).\n");
-    Serial.printf ("  Signal needs only 10 Hz (Nyquist for 5 Hz).\n");
-    Serial.printf ("  fs_max / fs_needed = %.0f / 10 = %.0fx oversampling.\n",
-                   fs_max, fs_max / 10.0f);
-    Serial.printf ("  Sampling-rate reduction potential: ~%.1f%%\n",
-                   (1.0f - 10.0f / fs_max) * 100.0f);
+    Serial.printf ("  Signal needs %.0f Hz by Nyquist; app uses %.0f Hz for conservative 8x margin.\n",
+                   nyquist_fs_hz, app_target_fs_hz);
+    Serial.printf ("  fs_max / fs_app = %.0f / %.0f = %.0fx oversampling.\n",
+                   fs_max, app_target_fs_hz, fs_max / app_target_fs_hz);
+    Serial.printf ("  Sampling-rate reduction potential vs fs_max: ~%.1f%%\n",
+                   (1.0f - app_target_fs_hz / fs_max) * 100.0f);
     Serial.println();
     Serial.printf ("  (Checksum to prevent optimisation: %lu — ignore)\n", accumulator);
     Serial.println("════════════════════════════════════════");

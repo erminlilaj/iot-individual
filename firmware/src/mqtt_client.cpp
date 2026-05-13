@@ -8,6 +8,7 @@
 #include <freertos/task.h>
 
 #define TOPIC_AVG  "eri/iot/average"
+#define TOPIC_AGG  "eri/iot/aggregate"
 #define TOPIC_PING "eri/iot/ping"
 #define TOPIC_PONG "eri/iot/pong"
 
@@ -95,23 +96,47 @@ void mqtt_init() {
     xTaskCreatePinnedToCore(mqtt_loop_task, "mqtt_loop", 4096, nullptr, 1, nullptr, 0);
 }
 
-void mqtt_send(float mean) {
+void mqtt_send(float mean,
+               uint32_t window_id,
+               uint16_t sample_count,
+               float fs_hz,
+               float dominant_hz) {
     if (!s_mqtt.connected()) return;
 
-    // Publish aggregated average
-    char buf[24];
-    snprintf(buf, sizeof(buf), "%.4f", mean);
-    if (!s_mqtt.publish(TOPIC_AVG, buf)) return;
+    // Keep the original small average topic for compatibility with older tools.
+    char avg_buf[24];
+    snprintf(avg_buf, sizeof(avg_buf), "%.4f", mean);
+    if (!s_mqtt.publish(TOPIC_AVG, avg_buf)) return;
+
+    // Publish a richer aggregate payload for edge analytics and debugging.
+    char json_buf[192];
+    snprintf(json_buf, sizeof(json_buf),
+             "{\"window\":%lu,\"mean\":%.4f,\"samples\":%u,"
+             "\"fs_hz\":%.1f,\"dominant_hz\":%.2f,\"rtt_ms\":%lld}",
+             (unsigned long)window_id,
+             mean,
+             (unsigned)sample_count,
+             fs_hz,
+             dominant_hz,
+             (long long)s_last_rtt_ms);
+    bool json_ok = s_mqtt.publish(TOPIC_AGG, json_buf);
 
     s_send_count++;
-    uint32_t payload_len = (uint32_t)strlen(buf);
+    uint32_t avg_payload_len = (uint32_t)strlen(avg_buf);
+    uint32_t json_payload_len = json_ok ? (uint32_t)strlen(json_buf) : 0u;
+    uint32_t payload_len = avg_payload_len + json_payload_len;
     s_total_bytes += payload_len;
 
     // Compare adaptive vs oversampled data volume.
-    // Oversampled baseline: 1,000 Hz × 5 s = 5,000 raw float samples × 4 bytes each.
-    uint32_t baseline_bytes = s_send_count * 5000u * sizeof(float);
-    Serial.printf("[MQTT] #%lu avg=%s  payload=%lu B  total=%lu B  baseline=%lu B  ratio=%.0fx\n",
-                  (unsigned long)s_send_count, buf,
+    // Fixed baseline: 50 Hz x 5 s = 250 raw float samples x 4 bytes each.
+    uint32_t baseline_bytes = s_send_count * 250u * sizeof(float);
+    Serial.printf("[MQTT] #%lu win=%lu avg=%s  avg_payload=%lu B  json_payload=%lu B"
+                  "  payload=%lu B  total=%lu B  baseline=%lu B  ratio=%.1fx\n",
+                  (unsigned long)s_send_count,
+                  (unsigned long)window_id,
+                  avg_buf,
+                  (unsigned long)avg_payload_len,
+                  (unsigned long)json_payload_len,
                   (unsigned long)payload_len,
                   (unsigned long)s_total_bytes,
                   (unsigned long)baseline_bytes,

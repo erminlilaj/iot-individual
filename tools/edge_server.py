@@ -32,6 +32,7 @@ BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "127.0.0.1")
 BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
 
 TOPIC_AVG  = "eri/iot/average"
+TOPIC_AGG  = "eri/iot/aggregate"
 TOPIC_PING = "eri/iot/ping"
 TOPIC_PONG = "eri/iot/pong"
 
@@ -61,8 +62,9 @@ def on_connect(client, userdata, flags, reason_code, properties):
         return
     print(f"[SERVER] Connected to broker at {BROKER_HOST}:{BROKER_PORT}")
     client.subscribe(TOPIC_AVG)
+    client.subscribe(TOPIC_AGG)
     client.subscribe(TOPIC_PING)
-    print(f"[SERVER] Subscribed to {TOPIC_AVG}  and  {TOPIC_PING}")
+    print(f"[SERVER] Subscribed to {TOPIC_AVG}, {TOPIC_AGG}, and {TOPIC_PING}")
     print(f"[SERVER] Logging to {LOG_PATH}")
     print("[SERVER] Waiting for messages from ESP32...\n")
 
@@ -81,6 +83,10 @@ def on_message(client, userdata, msg):
             csv_writer.writerow([iso, "average", f"{val:.4f}"])
         except ValueError:
             print(f"[{ts}] [EDGE] average (raw): {payload}")
+
+    elif topic == TOPIC_AGG:
+        print(f"[{ts}] [EDGE] aggregate received: {payload}")
+        csv_writer.writerow([iso, "aggregate", payload])
 
     elif topic == TOPIC_PING:
         _ping_times[payload] = time.monotonic()
