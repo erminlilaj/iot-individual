@@ -309,6 +309,31 @@ snprintf(json_buf, sizeof(json_buf),
          s_last_rtt_ms);
 ```
 
+MQTT edge communication flow:
+
+```mermaid
+flowchart LR
+    esp["ESP32 / Heltec<br/>generate signal<br/>sample at 40 Hz<br/>compute 5 s mean"]
+    payload["MQTT aggregate<br/>window id<br/>sample count<br/>mean<br/>fs + dominant Hz<br/>RTT field"]
+    broker["MQTT broker<br/>eri/iot/average<br/>eri/iot/aggregate<br/>local WiFi path"]
+    edge["Python edge listener<br/>subscribes to topics<br/>records received values<br/>computes latency<br/>writes CSV logs"]
+
+    esp -->|"publish"| payload
+    payload -->|"WiFi / MQTT"| broker
+    broker -->|"subscribe"| edge
+
+    classDef device fill:#0f2a44,stroke:#4ea1d3,color:#ffffff
+    classDef payload fill:#14324f,stroke:#7fc8f8,color:#ffffff
+    classDef broker fill:#173f2b,stroke:#64c987,color:#ffffff
+    classDef edge fill:#3a2b59,stroke:#a98df0,color:#ffffff
+    class esp device
+    class payload payload
+    class broker broker
+    class edge edge
+```
+
+Result: the edge server receives one aggregate per `5 s` window, not the raw sample stream.
+
 Canonical run:
 
 | Metric | Value |
