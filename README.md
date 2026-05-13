@@ -48,7 +48,6 @@ The best single evidence bundle is:
 The best technical explanation pack is:
 
 - [docs/evaluation/00_master_scoreboard.md](docs/evaluation/00_master_scoreboard.md)
-- [docs/defense_notes.md](docs/defense_notes.md)
 
 Read the results in two layers. The first layer is the core correctness path: the signal is known, the FFT finds the expected `5 Hz` component, the sampler adapts using the configured policy, and the `5 s` aggregate contains `fs * 5` samples. The second layer is the system-performance path: the same aggregate is sent through MQTT and LoRaWAN, then evaluated for payload size, latency, and power behavior.
 
@@ -141,7 +140,6 @@ tools/
   power_logs/           measured current/power outputs
 docs/
   evaluation/           rubric-oriented lab notebooks
-  defense_notes.md      detailed project explanation guide
 source/results/         curated result bundles and plots
 images/                 screenshots used by README and report
 ```
