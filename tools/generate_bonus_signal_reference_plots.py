@@ -38,7 +38,8 @@ def generate_clean(t_seconds: np.ndarray) -> np.ndarray:
 
 
 def clamp_adaptive_fs(dominant_hz: float) -> float:
-    return float(min(100.0, max(10.0, 2.0 * dominant_hz)))
+    proposed = round((dominant_hz * 8.0) / 5.0) * 5.0
+    return float(min(50.0, max(20.0, proposed)))
 
 
 def major_peak(samples: np.ndarray, fs_hz: float) -> float:
@@ -137,6 +138,7 @@ def main() -> None:
         f"- `spikes`: noise signal + signed uniform spike injection in `+-U({SPIKE_MIN:.0f}, {SPIKE_MAX:.0f})` with `p={SPIKE_PROB * 100:.0f}%`",
         "",
         f"Sampling assumptions for the reference plots: `FFT_N={FFT_N}`, baseline `fs={BASE_FS_HZ:.0f} Hz`, `{args.window_count}` synthetic FFT windows per signal.",
+        "Adaptive policy: `dominant_hz * 8`, rounded to `5 Hz` steps and clamped to `20-50 Hz`.",
         "",
     ]
 

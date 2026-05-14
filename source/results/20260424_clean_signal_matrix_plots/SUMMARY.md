@@ -1,10 +1,10 @@
 # Clean Signal Matrix Plot Bundle
 
-These plots are derived from the measured DUT sessions used in the README bonus section.
+These plots are derived from the implemented signal formulas and current adaptive policy used in the README bonus section.
 
 ## Signal A
 
-- Session: `tools/plot_sessions/20260422_120509_clean_dut_no_ina219_60s_v2`
+- Session: `tools/plot_sessions/20260513_090512_clean_40hz_new-fixes_retry`
 - Spectrum plot: `clean_a/clean_a_spectrum.svg`
 - Waveform plot: `clean_a/clean_a_waveform.svg`
 - Summary: `clean_a/SUMMARY.md`

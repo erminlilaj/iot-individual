@@ -119,7 +119,7 @@ Note: the project rulebook says the sampler should be on Core 1 and aggregation/
 | Decision | Why it was used |
 | --- | --- |
 | Virtual sensor | The assignment signal is mathematical. Generating it in firmware makes FFT validation repeatable and removes ADC wiring noise from the main experiment. |
-| Conservative adaptive rule | The clean signal has a `5 Hz` dominant component. The firmware now uses `8 * 5 Hz = 40 Hz` for practical margin instead of the theoretical `2x` Nyquist minimum. |
+| Conservative adaptive rule | The clean signal has a `5 Hz` dominant component. The firmware uses `8 * 5 Hz = 40 Hz`, above the `10 Hz` Nyquist minimum, for practical timing and FFT margin. |
 | Clamp to `20-50 Hz` | Prevents unstable extremes and keeps runtime behavior predictable around the fixed `50 Hz` baseline. |
 | `5 s` aggregation window | Long enough to smooth the sinusoidal mean, short enough for live MQTT updates. |
 | MQTT as primary demo path | Local, fast, easy to reproduce, and strongly logged on both sender and receiver sides. |
@@ -302,7 +302,7 @@ uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
 float mean = ring_buffer_mean_last(target_samples);
 ```
 
-The previous canonical run showed five consecutive adapted windows with `n=50` under the old `10 Hz` policy. The fresh `2026-05-13` capture confirms the current new-fixes policy with `14` parsed windows, all at `n=200` and `fs=40.0 Hz`.
+The fresh `2026-05-13` capture confirms the current policy with `14` parsed windows, all at `n=200` and `fs=40.0 Hz`.
 
 ```text
 [AGG]  win=...  mean=...  n=200  fs=40.0 Hz
@@ -442,7 +442,7 @@ The real implementation sends one aggregate payload instead of streaming all raw
 
 This comparison is intentionally simple: it asks how many bytes cross the network for one `5 s` result. The internal sample count affects CPU and memory work, but the transmitted MQTT payload stays small because the edge server receives only the aggregate.
 
-Baseline used for the new-fixes comparison:
+Baseline used for the network comparison:
 
 ```text
 50 Hz * 5 s * 4 B = 1000 B
@@ -475,17 +475,27 @@ The firmware supports multiple signal modes through PlatformIO build flags:
 | `spikes_p1`, `spikes_p5`, `spikes_p10` | spike probability variants |
 | `clean_b`, `clean_c` | alternate clean multi-tone formulas |
 
-Three clean signal variants show an important limitation of the current adaptive rule: it follows the dominant FFT peak, not always the highest-frequency tone present.
+The bonus plots were regenerated with the current adaptive rule: `dominant_hz * 8`, rounded to `5 Hz` steps and clamped to `20-50 Hz`.
 
-| Signal | Formula | Expected highest | Measured dominant | Adaptive fs |
-| --- | --- | ---: | ---: | ---: |
-| A | `2*sin(2*pi*3*t)+4*sin(2*pi*5*t)` | `5 Hz` | `5.00 Hz` | `10.00 Hz` |
-| B | `4*sin(2*pi*3*t)+2*sin(2*pi*9*t)` | `9 Hz` | `3.01 Hz` | old run: `10.00 Hz`; current policy would target about `25 Hz` |
-| C | `2*sin(2*pi*2*t)+3*sin(2*pi*5*t)+1.5*sin(2*pi*7*t)` | `7 Hz` | `5.03 Hz` | old run: `10.10 Hz`; current policy would target about `40 Hz` |
+For the clean/noise/spikes signal families, the implemented reference generator keeps the dominant peak near `5.08 Hz`, so all three converge to `40 Hz` in the current policy:
+
+| Signal family | Main input | Dominant mean | Adaptive fs |
+| --- | --- | ---: | ---: |
+| `clean` | required `3 Hz + 5 Hz` signal | `5.078 Hz` | `40.0 Hz` |
+| `noise` | clean signal + Gaussian noise | `5.078 Hz` | `40.0 Hz` |
+| `spikes` | noisy signal + injected spikes | `5.078 Hz` | `40.0 Hz` |
+
+The alternate clean signal variants show an important limitation of the current adaptive rule: it follows the dominant FFT peak, not always the highest-frequency tone present.
+
+| Signal | Formula | Highest tone | Dominant peak | Current adaptive fs | 5 s window |
+| --- | --- | ---: | ---: | ---: | ---: |
+| A | `2*sin(2*pi*3*t)+4*sin(2*pi*5*t)` | `5 Hz` | `5.02 Hz` | `40.00 Hz` | `200` |
+| B | `4*sin(2*pi*3*t)+2*sin(2*pi*9*t)` | `9 Hz` | `3.01 Hz` | `25.00 Hz` | `125` |
+| C | `2*sin(2*pi*2*t)+3*sin(2*pi*5*t)+1.5*sin(2*pi*7*t)` | `7 Hz` | `5.03 Hz` | `40.00 Hz` | `200` |
 
 ![Signal B spectrum](source/results/20260424_clean_signal_matrix_plots/clean_b/clean_b_spectrum.svg)
 
-This is useful for the bonus discussion because it shows both the strength and the limitation of the simple dominant-peak controller.
+This is useful for the bonus discussion because it shows both the strength and the limitation of the simple dominant-peak controller. Signal B contains a `9 Hz` tone, but its `3 Hz` component is stronger, so the controller adapts from the dominant `3 Hz` peak instead of from the highest tone.
 
 ## Evidence Gallery
 

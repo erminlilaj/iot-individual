@@ -51,10 +51,10 @@ def run_id_for(path: Path) -> str:
 
 def stable_label(mode: str, dominant_hz: float, adaptive_fs_hz: float) -> str:
     if mode == "clean":
-        return "yes" if abs(dominant_hz - 5.0) <= 0.2 and 9.5 <= adaptive_fs_hz <= 10.5 else "no"
+        return "yes" if abs(dominant_hz - 5.0) <= 0.2 and 39.0 <= adaptive_fs_hz <= 41.0 else "no"
     if mode == "noise":
-        return "yes" if abs(dominant_hz - 5.0) <= 0.5 and 9.0 <= adaptive_fs_hz <= 11.0 else "no"
-    return "yes" if 8.0 <= adaptive_fs_hz <= 12.0 else "mixed"
+        return "yes" if abs(dominant_hz - 5.0) <= 0.5 and 35.0 <= adaptive_fs_hz <= 45.0 else "no"
+    return "yes" if 20.0 <= adaptive_fs_hz <= 50.0 else "mixed"
 
 
 def quality_note_for_k(k: int) -> str:

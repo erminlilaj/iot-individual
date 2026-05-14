@@ -1,0 +1,2 @@
+run_id,mode,spike_pct,noise_sigma,spike_dist,fft_n,dominant_hz,adaptive_fs_hz,baseline_fs_hz,adaptive_window_n,baseline_window_n,duty_pct,i_avg_proxy_ma,savings_pct,stable_yes_no
+20260513_090512_clean_40hz_new-fixes_retry,clean,0,0.0,,0,5.02,40.0,50.0,200,250,0.1684,78.167,0.05,yes

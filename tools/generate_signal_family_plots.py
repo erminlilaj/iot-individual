@@ -198,10 +198,11 @@ def plot_adaptive_fs(out_path: Path, signal_name: str, fft_rows: list[dict[str, 
     idx = np.arange(1, len(fft_rows) + 1, dtype=float)
     dominant = np.array([float(row["dominant_hz"]) for row in fft_rows], dtype=float)
     fs_vals = np.array([float(row["fs_hz"]) for row in fft_rows], dtype=float)
+    policy_target = np.clip(np.round((dominant * 8.0) / 5.0) * 5.0, 20.0, 50.0)
 
     x_min, x_max = 1.0, float(max(2, len(idx)))
     y_min = 0.0
-    y_max = float(max(np.max(fs_vals), np.max(2.0 * dominant)) * 1.15)
+    y_max = float(max(np.max(fs_vals), np.max(policy_target)) * 1.15)
 
     lines = svg_header(
         f"{signal_name} adaptive sampling history",
@@ -210,25 +211,25 @@ def plot_adaptive_fs(out_path: Path, signal_name: str, fft_rows: list[dict[str, 
     draw_axes(lines, tick_values(x_min, x_max), tick_values(y_min, y_max), x_min, x_max, y_min, y_max, "FFT update index", "Frequency (Hz)")
 
     duty_line = data_to_points(idx, fs_vals, x_min, x_max, y_min, y_max)
-    target_line = data_to_points(idx, 2.0 * dominant, x_min, x_max, y_min, y_max)
+    target_line = data_to_points(idx, policy_target, x_min, x_max, y_min, y_max)
     lines.append(f'<polyline fill="none" stroke="#155e63" stroke-width="2.5" points="{duty_line}"/>')
     lines.append(f'<polyline fill="none" stroke="#ef7d00" stroke-width="2" stroke-dasharray="8 6" points="{target_line}"/>')
 
     plot_w = WIDTH - PLOT_LEFT - PLOT_RIGHT
     plot_h = HEIGHT - PLOT_TOP - PLOT_BOTTOM
-    y_target = 10.0
+    y_target = 40.0
     if y_max > y_min:
         y_px = PLOT_TOP + plot_h - ((y_target - y_min) / (y_max - y_min)) * plot_h
         lines.append(f'<line x1="{PLOT_LEFT}" y1="{y_px:.2f}" x2="{PLOT_LEFT + plot_w}" y2="{y_px:.2f}" stroke="#7b8794" stroke-dasharray="4 6" stroke-width="1.5"/>')
         lines.append(
-            f'<text x="{PLOT_LEFT + plot_w - 6}" y="{y_px - 6:.2f}" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#58677a">10 Hz target</text>'
+            f'<text x="{PLOT_LEFT + plot_w - 6}" y="{y_px - 6:.2f}" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#58677a">40 Hz target</text>'
         )
 
     lines.append(f'<rect x="{WIDTH - 230}" y="{PLOT_TOP + 8}" width="180" height="52" rx="8" fill="#fffdfa" stroke="#d9d2c3"/>')
     lines.append(f'<line x1="{WIDTH - 214}" y1="{PLOT_TOP + 24}" x2="{WIDTH - 174}" y2="{PLOT_TOP + 24}" stroke="#155e63" stroke-width="2.5"/>')
     lines.append(f'<text x="{WIDTH - 166}" y="{PLOT_TOP + 28}" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#35495e">adaptive fs</text>')
     lines.append(f'<line x1="{WIDTH - 214}" y1="{PLOT_TOP + 44}" x2="{WIDTH - 174}" y2="{PLOT_TOP + 44}" stroke="#ef7d00" stroke-width="2" stroke-dasharray="8 6"/>')
-    lines.append(f'<text x="{WIDTH - 166}" y="{PLOT_TOP + 48}" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#35495e">2 x dominant</text>')
+    lines.append(f'<text x="{WIDTH - 166}" y="{PLOT_TOP + 48}" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="#35495e">8x policy</text>')
     save_svg(out_path, lines)
     return {
         "fft_updates": str(len(fft_rows)),

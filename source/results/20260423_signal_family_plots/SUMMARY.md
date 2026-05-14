@@ -6,25 +6,26 @@ These plots are generated from the implemented firmware signal definitions:
 - `spikes`: noise signal + signed uniform spike injection in `+-U(5, 15)` with `p=2%`
 
 Sampling assumptions for the reference plots: `FFT_N=256`, baseline `fs=100 Hz`, `6` synthetic FFT windows per signal.
+Adaptive policy: `dominant_hz * 8`, rounded to `5 Hz` steps and clamped to `20-50 Hz`.
 
 ## clean
 
 - Dominant mean frequency: `5.078 Hz`
-- Adaptive fs mean/min/max: `10.156 / 10.156 / 10.156 Hz`
+- Adaptive fs mean/min/max: `40.000 / 40.000 / 40.000 Hz`
 - Main spectrum peaks: `5.08 Hz`, `4.69 Hz`, `3.12 Hz`
 - Plots: `clean_waveform.svg`, `clean_spectrum.svg`, `clean_adaptive_fs.svg`
 
 ## noise
 
 - Dominant mean frequency: `5.078 Hz`
-- Adaptive fs mean/min/max: `10.156 / 10.156 / 10.156 Hz`
+- Adaptive fs mean/min/max: `40.000 / 40.000 / 40.000 Hz`
 - Main spectrum peaks: `5.08 Hz`, `4.69 Hz`, `3.12 Hz`
 - Plots: `noise_waveform.svg`, `noise_spectrum.svg`, `noise_adaptive_fs.svg`
 
 ## spikes
 
 - Dominant mean frequency: `5.078 Hz`
-- Adaptive fs mean/min/max: `10.156 / 10.156 / 10.156 Hz`
+- Adaptive fs mean/min/max: `40.000 / 40.000 / 40.000 Hz`
 - Main spectrum peaks: `5.08 Hz`, `4.69 Hz`, `3.12 Hz`
 - Plots: `spikes_waveform.svg`, `spikes_spectrum.svg`, `spikes_adaptive_fs.svg`
 
