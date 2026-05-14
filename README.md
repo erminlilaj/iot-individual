@@ -181,6 +181,12 @@ The second value is the current FreeRTOS-paced application ceiling. The real sam
 
 The difference matters because raw benchmark speed and full-application scheduled speed are not the same metric. The raw value shows the fast ceiling. The `1000 Hz` value explains why the current task loop cannot actually schedule samples faster than one per millisecond.
 
+Key timing line:
+
+```cpp
+vTaskDelay(pdMS_TO_TICKS(1));
+```
+
 Implementation excerpt from [firmware/src/benchmark.cpp](firmware/src/benchmark.cpp):
 
 ```cpp
@@ -268,6 +274,12 @@ new_fs = clamp_float(new_fs, TASKS_ADAPTIVE_MIN_FS_HZ, TASKS_ADAPTIVE_MAX_FS_HZ)
 g_fs_current = new_fs;
 ```
 
+Key adaptive line:
+
+```cpp
+float new_fs = (float)dominant * TASKS_ADAPTIVE_OVERSAMPLING_FACTOR;
+```
+
 The current FreeRTOS timing is millisecond-paced:
 
 ```cpp
@@ -302,6 +314,12 @@ uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
 float mean = ring_buffer_mean_last(target_samples);
 ```
 
+Key aggregation line:
+
+```cpp
+uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
+```
+
 The fresh `2026-05-13` capture confirms the current policy with `14` parsed windows, all at `n=200` and `fs=40.0 Hz`.
 
 ```text
@@ -332,6 +350,12 @@ snprintf(json_buf, sizeof(json_buf),
          fs_hz,
          dominant_hz,
          s_last_rtt_ms);
+```
+
+Key publish line:
+
+```cpp
+s_mqtt.publish(TOPIC_AGG, json_buf);
 ```
 
 MQTT edge communication flow:
