@@ -320,6 +320,29 @@ Key aggregation line:
 uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
 ```
 
+The full handoff from aggregation to the communication layer happens in [firmware/src/aggregator.cpp](firmware/src/aggregator.cpp). The task reads the latest adaptive sampling frequency, computes the latest-window mean, then sends the same aggregate to LoRaWAN and MQTT:
+
+```cpp
+xSemaphoreTake(g_fs_mutex, portMAX_DELAY);
+float fs = g_fs_current;
+xSemaphoreGive(g_fs_mutex);
+
+uint16_t target_samples = (uint16_t)lroundf(fs * 5.0f);
+if (target_samples == 0) target_samples = 1;
+
+float mean = ring_buffer_mean_last(target_samples);
+uint16_t n = ring_buffer_count();
+if (n > target_samples) n = target_samples;
+
+window_count++;
+
+lorawan_send(mean);
+mqtt_send(mean, window_count, n, fs, g_last_fft_dominant_hz);
+
+Serial.printf("[AGG]  win=%lu  mean=%+.4f  n=%u  fs=%.1f Hz  proc_us=%lu\n",
+              (unsigned long)window_count, mean, n, fs, (unsigned long)proc_us);
+```
+
 The fresh `2026-05-13` capture confirms the current policy with `14` parsed windows, all at `n=200` and `fs=40.0 Hz`.
 
 ```text
@@ -341,6 +364,11 @@ MQTT is the best live-demo path because it has two visible sides: the ESP32 seri
 The current firmware keeps the old compact average topic and also publishes a metadata-rich JSON aggregate:
 
 ```cpp
+char avg_buf[24];
+snprintf(avg_buf, sizeof(avg_buf), "%.4f", mean);
+if (!s_mqtt.publish(TOPIC_AVG, avg_buf)) return;
+
+char json_buf[192];
 snprintf(json_buf, sizeof(json_buf),
          "{\"window\":%lu,\"mean\":%.4f,\"samples\":%u,"
          "\"fs_hz\":%.1f,\"dominant_hz\":%.2f,\"rtt_ms\":%lld}",
@@ -356,6 +384,30 @@ Key publish line:
 
 ```cpp
 s_mqtt.publish(TOPIC_AGG, json_buf);
+```
+
+The same MQTT function also accounts for transmitted bytes and sends a ping timestamp for round-trip latency measurement:
+
+```cpp
+uint32_t avg_payload_len = (uint32_t)strlen(avg_buf);
+uint32_t json_payload_len = json_ok ? (uint32_t)strlen(json_buf) : 0u;
+uint32_t payload_len = avg_payload_len + json_payload_len;
+s_total_bytes += payload_len;
+
+s_ping_us = esp_timer_get_time();
+char ts[24];
+snprintf(ts, sizeof(ts), "%lld", (long long)s_ping_us);
+s_mqtt.publish(TOPIC_PING, ts);
+```
+
+The edge server echoes `eri/iot/ping` back on `eri/iot/pong`; the firmware callback then computes the RTT:
+
+```cpp
+if (strcmp(topic, TOPIC_PONG) == 0) {
+    int64_t rtt = (esp_timer_get_time() - s_ping_us) / 1000LL;
+    s_last_rtt_ms = rtt;
+    Serial.printf("[LATENCY] rtt_ms=%lld\n", (long long)rtt);
+}
 ```
 
 MQTT edge communication flow:
@@ -415,6 +467,33 @@ Both communication paths receive the same aggregate result from [firmware/src/ag
 ```cpp
 lorawan_send(mean);
 mqtt_send(mean, window_count, n, fs, g_last_fft_dominant_hz);
+```
+
+The LoRaWAN sender in [firmware/src/lorawan.cpp](firmware/src/lorawan.cpp) keeps the uplink compact by converting the floating-point mean into a scaled `int16_t`. Multiplying by `100` preserves two decimal places while fitting the aggregate in a `2 B` payload:
+
+```cpp
+void lorawan_send(float mean) {
+    if (!g_joined) return;
+
+    // Encode mean as int16 x 100 -> 2 bytes, covers +/-327.67.
+    int16_t payload = (int16_t)(mean * 100.0f);
+
+    uint8_t nbytes = sizeof(payload);   // always 2
+    int16_t state  = node.sendReceive((uint8_t*)&payload, nbytes, 1);
+```
+
+After the send attempt, the firmware logs cumulative bytes and end-to-end latency from the first sample in the FFT window to the LoRaWAN uplink result:
+
+```cpp
+int64_t latency_ms = (esp_timer_get_time() - g_window_start_us) / 1000LL;
+Serial.printf("[LoRa] uplink #%lu  mean=%+.4f  encoded=%d"
+              "  cumulative=%lu B  vs_oversampled=%lu B  ratio=%.0fx"
+              "  e2e_latency=%lld ms\n",
+              (unsigned long)s_uplink_count, mean, payload,
+              (unsigned long)s_total_bytes,
+              (unsigned long)oversampled_bytes,
+              (float)oversampled_bytes / (float)s_total_bytes,
+              (long long)latency_ms);
 ```
 
 Canonical run:
